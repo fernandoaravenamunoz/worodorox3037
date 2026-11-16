@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#07060d">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>Worodorox 3073</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="css/estilo.css">
+</head>
+<body>
+  <!-- Contenedor que se escala para llenar la ventana manteniendo 16:9 -->
+  <div id="contenedor">
+    <canvas id="pantalla" width="320" height="180"></canvas>
+
+    <!-- Controles táctiles (solo visibles al detectar pantalla táctil; cambian según el modo) -->
+    <div id="capa-tactil">
+      <!-- Laberinto -->
+      <div id="joy-base"><div id="joy-perilla"></div></div>
+      <button class="boton-tactil solo-3d" id="btn-q" data-boton="q">MAPA</button>
+      <button class="boton-tactil solo-3d solo-2d" id="btn-e" data-boton="e">LIBRETA</button>
+      <button class="boton-tactil solo-3d solo-2d" id="btn-accion" data-boton="accion">USAR</button>
+      <button class="boton-tactil solo-3d solo-2d" id="btn-pausa" data-boton="pausa">II</button>
+      <!-- Salas 2D -->
+      <button class="boton-tactil solo-2d" id="btn-izq" data-boton="izq" data-mantener="1">&#9664;</button>
+      <button class="boton-tactil solo-2d" id="btn-der" data-boton="der" data-mantener="1">&#9654;</button>
+      <button class="boton-tactil solo-2d" id="btn-salto" data-boton="salto" data-mantener="1">SALTO</button>
+    </div>
+  </div>
+
+  <div id="girar">Gira tu teléfono para jugar</div>
+
+  <!-- Scripts clásicos (sin módulos) para que funcione abriendo el archivo directamente -->
+  <script src="js/config.js"></script>
+  <script src="js/fuente.js"></script>
+  <script src="js/motor3d/texturas.js"></script>
+  <script src="js/motor3d/mapa.js"></script>
+  <script src="js/motor3d/raycaster.js"></script>
+
+  <script src="js/puzzles/pistas.js"></script>
+  <script src="js/puzzles/base.js"></script>
+  <script src="js/puzzles/matriz.js"></script>
+  <script src="js/puzzles/serie.js"></script>
+  <script src="js/puzzles/asociacion.js"></script>
+  <script src="js/puzzles/deslizante.js"></script>
+  <script src="js/puzzles/simon.js"></script>
+  <script src="js/puzzles/luces.js"></script>
+  <script src="js/puzzles/codigo.js"></script>
+
+  <script src="js/entidades/personajes.js"></script>
+  <script src="js/entidades/jugador.js"></script>
+  <script src="js/entidades/enemigos.js"></script>
+  <script src="js/entidades/trampas.js"></script>
+
+  <script src="js/juego/partida.js"></script>
+  <script src="js/juego/nivel.js"></script>
+  <script src="js/juego/jefe.js"></script>
+  <script src="js/motor2d/plataformas.js"></script>
+
+  <script src="js/input.js"></script>
+  <script src="js/ui/hud.js"></script>
+  <script src="js/ui/mapa.js"></script>
+  <script src="js/ui/libreta.js"></script>
+  <script src="js/ui/menus.js"></script>
+  <script src="js/audio/synth.js"></script>
+
+  <!-- Multijugador (fase 10): PeerJS va incluido en el proyecto -->
+  <script src="js/red/peerjs.min.js"></script>
+  <script src="js/red/config_red.js"></script>
+  <script src="js/red/transporte.js"></script>
+  <script src="js/red/red.js"></script>
+  <script src="js/ui/menu_red.js"></script>
+
+  <script src="js/niveles/nivel01.js"></script>
+  <script src="js/niveles/nivel02.js"></script>
+  <script src="js/niveles/nivel03.js"></script>
+  <script src="js/niveles/nivel04.js"></script>
+  <script src="js/niveles/nivel05.js"></script>
+  <script src="js/niveles/nivel06.js"></script>
+  <script src="js/niveles/nivel07.js"></script>
+  <script src="js/niveles/nivel08.js"></script>
+  <script src="js/niveles/nivel09.js"></script>
+  <script src="js/niveles/nivel10.js"></script>
+  <script src="js/niveles/nivel11.js"></script>
+  <script src="js/niveles/nivel12.js"></script>
+
+  <script src="js/main.js"></script>
+</body>
+</html>

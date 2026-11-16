@@ -1,0 +1,150 @@
+html, body {
+  margin: 0;
+  height: 100%;
+  background: #000;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#contenedor {
+  position: relative;
+}
+
+#pantalla {
+  width: 100%;
+  height: 100%;
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  cursor: crosshair;
+}
+.modo-ui #pantalla { cursor: pointer; }
+
+/* La capa táctil no bloquea el mouse; solo sus botones reciben toques */
+#capa-tactil {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.boton-tactil {
+  display: none;
+  position: absolute;
+  pointer-events: auto;
+  font-family: monospace;
+  font-weight: bold;
+  color: #c8fbff;
+  background: rgba(7, 6, 13, 0.5);
+  border: 2px solid #22e4ff;
+  border-radius: 12px;
+  padding: 0;
+  touch-action: none;
+}
+
+/* Los botones aparecen solo con pantalla táctil y según el modo (laberinto / sala 2D) */
+.tactil.modo-3d .solo-3d,
+.tactil.modo-2d .solo-2d { display: block; }
+.boton-tactil.activo { background: rgba(34, 228, 255, 0.4); }
+
+/* Botón de acción grande (USAR / ARMA) */
+#btn-accion {
+  right: 4%;
+  bottom: 22%;
+  width: 19vh;
+  height: 19vh;
+  border-radius: 50%;
+  border-color: #ff2bd6;
+  color: #ffd0f5;
+  font-size: 3.4vh;
+}
+.modo-2d #btn-accion { right: 4%; bottom: 8%; width: 17vh; height: 17vh; }
+
+#btn-q, #btn-e {
+  top: 5%;
+  width: 15vh;
+  height: 10vh;
+  font-size: 2.6vh;
+}
+#btn-e { right: 4%; }
+#btn-q { right: calc(4% + 17vh); border-color: #ff2bd6; }
+
+#btn-pausa {
+  top: 5%;
+  left: 3%;
+  width: 9vh;
+  height: 9vh;
+  font-size: 3vh;
+  border-color: #8d93ad;
+}
+
+/* Salas 2D: flechas a la izquierda, salto a la derecha */
+#btn-izq, #btn-der {
+  bottom: 8%;
+  width: 18vh;
+  height: 18vh;
+  font-size: 6vh;
+  border-color: #e8b923;
+  color: #ffd34a;
+}
+#btn-izq { left: 3%; }
+#btn-der { left: calc(3% + 21vh); }
+#btn-salto {
+  right: calc(4% + 20vh);
+  bottom: 20%;
+  width: 18vh;
+  height: 18vh;
+  border-radius: 50%;
+  font-size: 3vh;
+  border-color: #e8b923;
+  color: #ffd34a;
+}
+
+#joy-base {
+  position: absolute;
+  display: none;
+  width: 22vh;
+  height: 22vh;
+  margin: -11vh 0 0 -11vh;
+  border: 2px solid rgba(34, 228, 255, 0.6);
+  border-radius: 50%;
+  background: rgba(34, 228, 255, 0.08);
+}
+
+#joy-perilla {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 9vh;
+  height: 9vh;
+  margin: -4.5vh 0 0 -4.5vh;
+  border-radius: 50%;
+  background: rgba(34, 228, 255, 0.5);
+}
+
+#girar {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: #07060d;
+  color: #22e4ff;
+  font-family: monospace;
+  font-size: 20px;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 20px;
+}
+
+@media (orientation: portrait) and (pointer: coarse) {
+  #girar { display: flex; }
+}

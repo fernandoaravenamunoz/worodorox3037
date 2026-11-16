@@ -1,0 +1,140 @@
+// =====================================================
+// Pantallas del multijugador: teclado para el código y sala de espera
+// =====================================================
+(function () {
+  'use strict';
+  const C = W.config, PAL = W.paleta;
+  const A = C.ANCHO, H = C.ALTO;
+  const U = function () { return W.Puzzles.util; };
+  const T = function (ctx, s, x, y, c, e, al) { W.HUD.texto(ctx, s, x, y, c, e, al); };
+  const COL = W.texturas.COLORES_PUESTO;
+
+  // ---------- Ingreso del código (teclado numérico grande para el celular) ----------
+  const TECLAS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'BORRAR', '0', 'OK'];
+  const Codigo = {
+    digitos: '',
+    volver: { x: 6, y: 4, w: 44, h: 12 },
+    rect: function (i) { return { x: 100 + (i % 3) * 42, y: 58 + Math.floor(i / 3) * 27, w: 38, h: 23 }; },
+    reiniciar: function () { Codigo.digitos = ''; },
+    // Devuelve 'unirse', 'volver' o null
+    clic: function (x, y) {
+      if (U().dentro({ x: x, y: y }, Codigo.volver)) return 'volver';
+      for (let i = 0; i < TECLAS.length; i++) if (U().dentro({ x: x, y: y }, Codigo.rect(i))) return Codigo.pulsar(TECLAS[i]);
+      return null;
+    },
+    pulsar: function (k) {
+      if (W.Audio) W.Audio.sfx('clic');
+      if (k === 'BORRAR') Codigo.digitos = Codigo.digitos.slice(0, -1);
+      else if (k === 'OK') return Codigo.digitos.length === 5 ? 'unirse' : null;
+      else if (Codigo.digitos.length < 5) Codigo.digitos += k;
+      return null;
+    },
+    tecla: function (k) {
+      const m = /^(Digit|Numpad)(\d)$/.exec(k);
+      if (m) return Codigo.pulsar(m[2]);
+      if (k === 'Backspace') return Codigo.pulsar('BORRAR');
+      if (k === 'Enter' || k === 'NumpadEnter') return Codigo.pulsar('OK');
+      if (k === 'Escape') return 'volver';
+      return null;
+    },
+    dibujar: function (ctx, t) {
+      ctx.fillStyle = PAL.fondo; ctx.fillRect(0, 0, A, H);
+      U().boton(ctx, Codigo.volver, 'VOLVER', PAL.gris);
+      T(ctx, 'UNIRSE A UNA PARTIDA', A / 2, 8, PAL.magenta, 1, 'centro');
+      T(ctx, 'ESCRIBE EL CODIGO DE 5 NUMEROS QUE TE DIO EL ANFITRION', A / 2, 22, PAL.gris, 1, 'centro');
+      // Casillas del código
+      for (let i = 0; i < 5; i++) {
+        const r = { x: 105 + i * 23, y: 32, w: 19, h: 20 };
+        U().boton(ctx, r, '', i === Codigo.digitos.length && Math.floor(t * 3) % 2 ? PAL.cianClaro : PAL.cianOsc, '#0b0d16');
+        if (Codigo.digitos[i]) T(ctx, Codigo.digitos[i], r.x + r.w / 2, r.y + 5, PAL.blanco, 2, 'centro');
+      }
+      for (let i = 0; i < TECLAS.length; i++) {
+        const k = TECLAS[i], r = Codigo.rect(i);
+        const color = k === 'OK' ? (Codigo.digitos.length === 5 ? PAL.verde : PAL.grisOsc) : k === 'BORRAR' ? PAL.amarillo : PAL.cian;
+        U().boton(ctx, r, '', color);
+        T(ctx, k, r.x + r.w / 2, r.y + (k.length > 1 ? 9 : 6), color, k.length > 1 ? 1 : 2, 'centro');
+      }
+      const R = W.Red;
+      if (R.error) T(ctx, R.error, A / 2, 168, PAL.rojo, 1, 'centro');
+      else if (R.estado) T(ctx, R.estado, A / 2, 168, PAL.amarillo, 1, 'centro');
+    }
+  };
+
+  // ---------- Sala de espera ----------
+  const Sala = {
+    iniciar: { x: A / 2 - 45, y: 150, w: 90, h: 16 },
+    salir: { x: 6, y: 4, w: 40, h: 12 },
+    menos: { x: 214, y: 128, w: 14, h: 13 },
+    mas: { x: 292, y: 128, w: 14, h: 13 },
+    // Devuelve 'iniciar', 'salir' o null
+    clic: function (x, y) {
+      const p = { x: x, y: y }, R = W.Red;
+      if (U().dentro(p, Sala.salir)) return 'salir';
+      if (R.esAnfitrion()) {
+        if (U().dentro(p, Sala.menos)) { R.cambiarNivel(-1); return null; }
+        if (U().dentro(p, Sala.mas)) { R.cambiarNivel(1); return null; }
+        if (U().dentro(p, Sala.iniciar) && R.activo) return 'iniciar';
+      }
+      return null;
+    },
+    tecla: function (k) {
+      const R = W.Red;
+      if (k === 'Escape') return 'salir';
+      if (R.esAnfitrion()) {
+        if (k === 'ArrowLeft') R.cambiarNivel(-1);
+        if (k === 'ArrowRight') R.cambiarNivel(1);
+        if (k === 'Enter' && R.activo) return 'iniciar';
+      }
+      return null;
+    },
+    dibujar: function (ctx, t) {
+      const R = W.Red;
+      ctx.fillStyle = PAL.fondo; ctx.fillRect(0, 0, A, H);
+      U().boton(ctx, Sala.salir, 'SALIR', PAL.gris);
+      T(ctx, 'SALA DE ESPERA - COOPERATIVO', A / 2, 8, PAL.magenta, 1, 'centro');
+      if (R.esAnfitrion()) {
+        if (R.activo) {
+          T(ctx, 'CODIGO DE LA PARTIDA', A / 2, 22, PAL.gris, 1, 'centro');
+          T(ctx, R.codigo, A / 2 + 1, 31, PAL.cianOsc, 4, 'centro');
+          T(ctx, R.codigo, A / 2, 30, PAL.cianClaro, 4, 'centro');
+          T(ctx, 'DASELO A TUS AMIGOS PARA QUE SE UNAN', A / 2, 54, PAL.gris, 1, 'centro');
+        }
+      } else {
+        T(ctx, 'PARTIDA ' + R.codigo, A / 2, 26, PAL.cianClaro, 2, 'centro');
+      }
+      // Jugadores
+      for (let i = 0; i < W.configRed.MAX_JUGADORES; i++) {
+        const r = { x: 14 + i * 74, y: 64, w: 68, h: 56 };
+        const j = R.jugadores.find(function (q) { return q.puesto === i; });
+        U().boton(ctx, r, '', j ? COL[i] : '#1d1b2e', '#0b0a18');
+        if (j) {
+          const p = W.PERSONAJES[j.personaje];
+          W.Personajes.dibujarCuerpo(ctx, j.personaje, r.x + 26, r.y + 6, 1, t * 6 + i, 2, false);
+          T(ctx, p.nombre, r.x + r.w / 2, r.y + 38, PAL.blanco, 1, 'centro');
+          T(ctx, i === 0 ? 'ANFITRION' : (j.puesto === R.puesto ? 'TU' : 'JUGADOR ' + (i + 1)), r.x + r.w / 2, r.y + 47, COL[i], 1, 'centro');
+        } else {
+          T(ctx, Math.floor(t * 2) % 2 ? 'LIBRE' : '...', r.x + r.w / 2, r.y + 25, PAL.grisOsc, 1, 'centro');
+        }
+      }
+      // Nivel inicial
+      T(ctx, 'NIVEL INICIAL', 160, 131, PAL.gris, 1, 'centro');
+      if (R.esAnfitrion()) {
+        U().boton(ctx, Sala.menos, '<', PAL.cian);
+        U().boton(ctx, Sala.mas, '>', PAL.cian);
+      }
+      T(ctx, String(R.nivelElegido), 260, 129, PAL.cianClaro, 2, 'centro');
+      T(ctx, (W.niveles[R.nivelElegido] || {}).nombre || '', 260, 142, PAL.grisOsc, 1, 'centro');
+      // Botón / estado
+      if (R.esAnfitrion()) {
+        U().boton(ctx, Sala.iniciar, R.jugadores.length > 1 ? 'INICIAR' : 'INICIAR SOLO', R.activo ? PAL.verde : PAL.grisOsc, '#0b1a12');
+      } else {
+        T(ctx, 'EL ANFITRION ELIGE EL NIVEL E INICIA', A / 2, 155, PAL.gris, 1, 'centro');
+      }
+      if (R.error) T(ctx, R.error, A / 2, 170, PAL.rojo, 1, 'centro');
+      else if (R.estado && !R.activo) T(ctx, R.estado, A / 2, 170, PAL.amarillo, 1, 'centro');
+      else if (W.configRed.transporte === 'local') T(ctx, 'MODO DE PRUEBA LOCAL (MISMO COMPUTADOR)', A / 2, 170, PAL.amarillo, 1, 'centro');
+    }
+  };
+
+  W.MenuRed = { Codigo: Codigo, Sala: Sala };
+})();
