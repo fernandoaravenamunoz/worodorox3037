@@ -4,11 +4,14 @@
 // y arma el mapa, las pistas, enemigos, trampas y botiquines.
 // No dibuja ni lee la entrada directamente: main.js le pasa la entrada
 // y él devuelve "acciones" (abrir un puzzle, entrar a una sala 2D...).
-// Esta separación facilitará el multijugador.
 //
 // Pistas compuestas: en la definición del nivel, una pista con { partes: 2 }
 // se reparte en dos hologramas: { pista: 'p1', parte: 1 } y { pista: 'p1', parte: 2 }.
 // Cada parte se anota por separado en la libreta; la cerradura se resuelve con ambas.
+//
+// Multijugador: las palancas, las pistas repartidas, el apoyo al ducto y todo el
+// versus están en juego/multijugador.js (amplía este mismo prototipo).
+// Modos: this.modo = 'solo' | 'coop' | 'carrera' | 'combate'
 // =====================================================
 (function () {
   'use strict';
@@ -31,10 +34,14 @@
     this.viento = 0;
     this.efectos = [];        // destellos de impacto
     this.alerta = false;
-    this.otros = {};          // multijugador: los demás jugadores { puesto: {x, y, ang, personaje, vida, estado} }
+    this.otros = {};          // multijugador: los demás jugadores { puesto: {x, y, ang, personaje, vida, estado, f} }
     this.red = null;          // multijugador: { rol, puesto }
+    this.modo = 'solo';       // 'solo' | 'coop' | 'carrera' | 'combate'
+    this.versus = false;      // carrera o combate
+    this.vs = null;           // estado del versus (poderes, minas, marcador...)
     this.esCliente = false;   // multijugador: true si los enemigos los controla el anfitrión
     this.jugOcupado = false;  // el jugador local está en un puzzle, menú o sala 2D
+    this.duenoHolo = null;    // cooperativo: casilla de holograma → puesto que la puede leer
 
     // ---------- Pistas (con variación según la semilla de la partida) ----------
     // this.pistas[k]        → pista completa (la usan las cerraduras)
@@ -57,16 +64,13 @@
     const mapa = this.mapa;
     const puertas = W.Partida.lista(partida, 'puertas', def.id);
     const estaciones = W.Partida.lista(partida, 'estaciones', def.id);
-    for (const i in this.mapa.meta) {
-      const m = this.mapa.meta[i];
-      const datos = mapa.celdas[i] === CEL.HOLOGRAMA ? this.pistaDeHolograma(m.def) : null;
-      if (datos) mapa.texCelda[i] = W.Pistas.textura(def.zona, datos);
-    }
+    this.texturasHologramas();
     puertas.forEach(function (i) { mapa.celdas[i] = 0; });
     estaciones.forEach(function (i) { mapa.texCelda[i] = mapa.tz.estacionActiva; });
     this.ductos = [];
     for (let i = 0; i < mapa.celdas.length; i++) if (mapa.celdas[i] === CEL.DUCTO) this.ductos.push(i);
     this.actualizarDuctos();
+    this.prepararPalancas();
 
     // ---------- Entidades sobre el piso ----------
     this.enemigos = [];
@@ -107,6 +111,19 @@
     return this.pistas[defHolo.pista] || null;
   };
 
+  // Texturas de los hologramas: la pista o, si la lee otro jugador, el holograma cifrado
+  Nivel.prototype.texturasHologramas = function () {
+    const mapa = this.mapa;
+    for (const i in this.mapa.meta) {
+      if (mapa.celdas[i] !== CEL.HOLOGRAMA) continue;
+      const m = this.mapa.meta[i];
+      const datos = this.pistaDeHolograma(m.def);
+      if (!datos) continue;
+      if (!this.puedeLeerHolo(+i)) mapa.texCelda[i] = W.texturas.hologramaCifrado(this.def.zona, this.duenoHolo[i], this.nombrePuesto(this.duenoHolo[i]));
+      else mapa.texCelda[i] = W.Pistas.textura(this.def.zona, datos);
+    }
+  };
+
   // ===================== ACTUALIZACIÓN =====================
   // En un jugador: se llama solo mientras se juega. En multijugador el "mundo"
   // sigue avanzando aunque el jugador local esté en un puzzle, la libreta o la pausa.
@@ -118,8 +135,8 @@
 
   Nivel.prototype.actualizarJugador = function (dt, entrada) {
     const jug = this.jug, mapa = this.mapa;
-    // Atrapado (multijugador): no se puede mover, espera el rescate
-    if (jug.atrapado) entrada = { avance: 0, lateral: 0, giro: entrada.giro, pitch: entrada.pitch, correr: false };
+    // Atrapado (cooperativo) o derribado (combate): no se puede mover
+    if (jug.atrapado || this.caidoVs()) entrada = { avance: 0, lateral: 0, giro: entrada.giro, pitch: entrada.pitch, correr: false };
     jug.actualizar(dt, entrada, mapa);
 
     // Última posición segura
@@ -129,7 +146,7 @@
     // Botiquines
     for (let k = this.botiquines.length - 1; k >= 0; k--) {
       const b = this.botiquines[k];
-      if (!jug.atrapado && Math.hypot(b.x - jug.x, b.y - jug.y) < 0.5 && jug.vida < jug.vidaMax) {
+      if (!jug.atrapado && !this.caidoVs() && Math.hypot(b.x - jug.x, b.y - jug.y) < 0.5 && jug.vida < jug.vidaMax) {
         jug.curar(4);
         this.quitarBotiquin(b.i);
         this.emitir({ t: 'botiquin', i: b.i });
@@ -141,7 +158,12 @@
 
   Nivel.prototype.quitarBotiquin = function (i) {
     const k = this.botiquines.findIndex(function (b) { return b.i === i; });
-    if (k >= 0) this.botiquines.splice(k, 1);
+    if (k >= 0) {
+      const b = this.botiquines.splice(k, 1)[0];
+      // En combate los botiquines vuelven a aparecer después de un rato
+      if (this.modo === 'combate' && this.vs) this.vs.retirados.push({ b: b, t: W.configRed.VS.BOTIQUIN_REAPARECE });
+    }
+    if (this.modo === 'combate') return;
     const usados = W.Partida.lista(this.partida, 'botiquines', this.def.id);
     if (usados.indexOf(i) < 0) usados.push(i);
   };
@@ -169,6 +191,8 @@
       o.x += (o.tx - o.x) * suave; o.y += (o.ty - o.y) * suave;
     }
     this.actualizarConos();
+    this.actualizarPalancas(dt);
+    if (this.versus) this.actualizarVs(dt);
 
     // Puertas abriéndose
     for (let i = 0; i < mapa.apertura.length; i++) {
@@ -224,19 +248,22 @@
     for (const e of this.enemigos) lista.push(e.sprite());
     for (const t of this.trampas) { const s = t.sprite(); if (s) lista.push(s); }
     for (const b of this.botiquines) lista.push({ x: b.x, y: b.y, tex: W.texturas.sprites.botiquin, escala: 0.5, z: 0 });
-    for (const f of this.efectos) lista.push({ x: f.x, y: f.y, tex: W.texturas.sprites.impacto, escala: 0.4, z: f.z || 0.3 });
+    for (const f of this.efectos) lista.push({ x: f.x, y: f.y, tex: f.tex || W.texturas.sprites.impacto, escala: f.escala || 0.4, z: f.z || 0.3 });
     for (const k in this.otros) {
       const o = this.otros[k];
-      lista.push({ x: o.x, y: o.y, tex: W.texturas.spriteJugador(o.personaje, +k, o.estado === 'atrapado'), escala: 0.8, z: 0 });
+      lista.push({ x: o.x, y: o.y, tex: W.texturas.spriteJugadorEstado(o.personaje, +k, this.estadoVisual(o)), escala: 0.8, z: 0 });
     }
+    if (this.versus) this.spritesVs(lista);
     return lista;
   };
 
   // ===================== DAÑO =====================
-  // Jugadores que los enemigos pueden atacar (el local y, en multijugador, los demás)
+  // Jugadores que los enemigos pueden atacar (el local y, en el cooperativo, los demás).
+  // En versus cada jugador simula sus propios enemigos: solo atacan al jugador local.
   Nivel.prototype.objetivos = function () {
     const l = [], j = this.jug;
-    if (!this.jugOcupado && !j.atrapado && j.vida > 0) l.push({ x: j.x, y: j.y, ang: j.ang, p: j.p, local: true });
+    if (!this.jugOcupado && !j.atrapado && !this.caidoVs() && j.vida > 0) l.push({ x: j.x, y: j.y, ang: j.ang, p: j.p, local: true });
+    if (this.versus) return l;
     for (const k in this.otros) {
       const o = this.otros[k];
       if (o.estado === 'activo') l.push({ x: o.x, y: o.y, ang: o.ang, p: W.PERSONAJES[o.personaje] || W.PERSONAJES.chispa, local: false, puesto: +k });
@@ -245,7 +272,7 @@
   };
 
   Nivel.prototype.danarJugador = function (n, motivo, ignorarInv) {
-    if (this.jugOcupado || this.jug.atrapado) return false;
+    if (this.jugOcupado || this.jug.atrapado || this.caidoVs()) return false;
     const ok = this.jug.danar(n, ignorarInv);
     if (ok && motivo) W.HUD.mostrar(motivo + ': -' + n, 1.5);
     return ok;
@@ -308,7 +335,12 @@
   // Aviso contextual de lo que hay al frente (y registro automático de pistas)
   Nivel.prototype.aviso = function (tolerancia) {
     const jug = this.jug;
-    if (jug.atrapado) return '';
+    if (jug.atrapado || this.caidoVs()) return '';
+    if (jug.aturdido > 0) return 'ATURDIDO POR UN EMP';
+    if (this.versus) {
+      const rv = this.rivalAlFrente(Math.max(jug.p.alcance, 1.8), tolerancia);
+      if (rv && rv.d <= jug.p.alcance) return 'ATACAR A ' + this.nombrePuesto(rv.puesto);
+    }
     const comp = this.companeroAlFrente(tolerancia);
     if (comp) return 'RESCATAR A ' + (W.PERSONAJES[comp.o.personaje] || {}).nombre;
     const e = this.enemigoAlFrente(Math.max(jug.p.alcance, 1.8), tolerancia);
@@ -322,6 +354,10 @@
     if (r.tipo === CEL.HOLOGRAMA && r.dist <= lejos) this.registrarPista(r);
     if (r.dist > lejos || !info || !info.aviso) return '';
     const i = this.mapa.indice(r.mx, r.my);
+    if (this.modo === 'combate' && (r.tipo === CEL.ESTACION || r.tipo === CEL.SALIDA || r.tipo === CEL.NUCLEO)) return '';
+    if (r.tipo === CEL.HOLOGRAMA && !this.puedeLeerHolo(i)) return 'CIFRADO: SOLO LO LEE ' + this.nombrePuesto(this.duenoHolo[i]);
+    if (r.tipo === CEL.DUCTO && this.companerosEnDucto().length && !this.apoyoDado) return 'APOYAR AL EQUIPO EN EL DUCTO';
+    if (r.tipo === CEL.PALANCA) return this.textoPalanca(i);
     if (r.tipo === CEL.ESTACION && this.estacionActiva(i)) return 'ESTACION ACTIVA';
     if (r.tipo === CEL.PUERTA_TARJETA) {
       const m = this.mapa.meta[i];
@@ -335,8 +371,9 @@
   };
 
   Nivel.prototype.registrarPista = function (r) {
-    const m = this.mapa.meta[this.mapa.indice(r.mx, r.my)];
-    if (!m || !m.def.pista) return;
+    const i = this.mapa.indice(r.mx, r.my);
+    const m = this.mapa.meta[i];
+    if (!m || !m.def.pista || !this.puedeLeerHolo(i)) return;
     const datos = this.pistaDeHolograma(m.def);
     if (datos && W.Partida.anotarPista(this.partida, datos.id, this.def.id, datos)) {
       if (datos.partes) {
@@ -353,9 +390,13 @@
   // Devuelve una acción para main.js o null.
   Nivel.prototype.accion = function (tolerancia) {
     const jug = this.jug, mapa = this.mapa, partida = this.partida;
-    if (jug.atrapado) return null;
+    if (jug.atrapado || this.caidoVs()) return null;
+    if (jug.aturdido > 0) { W.HUD.mostrar('ATURDIDO: TUS SISTEMAS SE REINICIAN', 1); return null; }
 
-    // 0) Compañero atrapado al frente (multijugador): rescatarlo con un puzzle
+    // Versus: golpear a un rival al frente
+    if (this.versus && this.golpearRival(tolerancia)) return null;
+
+    // 0) Compañero atrapado al frente (cooperativo): rescatarlo con un puzzle
     const comp = this.companeroAlFrente(tolerancia);
     if (comp) return this.accionRescatar(comp.puesto, comp.o);
 
@@ -382,8 +423,19 @@
     const i = mapa.indice(r.mx, r.my);
     const meta = mapa.meta[i];
 
+    // Combate: la arena no tiene salida, estaciones ni ductos
+    if (this.modo === 'combate' && (r.tipo === CEL.SALIDA || r.tipo === CEL.NUCLEO || r.tipo === CEL.ESTACION)) {
+      W.HUD.mostrar('EN COMBATE SOLO IMPORTA DERRIBAR RIVALES', 2);
+      return null;
+    }
+
     switch (r.tipo) {
       case CEL.HOLOGRAMA: {
+        if (!this.puedeLeerHolo(i)) {
+          W.HUD.mostrar('HOLOGRAMA CIFRADO. SOLO LO LEE ' + this.nombrePuesto(this.duenoHolo[i]) + ': PIDELE QUE TE LO DICTE', 3);
+          if (W.Audio) W.Audio.sfx('error');
+          return null;
+        }
         this.registrarPista(r);
         const datos = meta && this.pistaDeHolograma(meta.def);
         return datos ? { tipo: 'verPista', datos: datos } : null;
@@ -402,7 +454,16 @@
         }
         return null;
       }
+      case CEL.PALANCA:
+        this.tirarPalanca(i);
+        return null;
+      case CEL.PUERTA_PALANCA:
+        W.HUD.mostrar(this.ventanaPalanca() < 3
+          ? 'SE ABRE CON SUS DOS PALANCAS A LA VEZ: COORDINEN LA CUENTA'
+          : 'SE ABRE CON SUS DOS PALANCAS: TIENES ' + this.ventanaPalanca() + ' S ENTRE UNA Y OTRA', 3);
+        return null;
       case CEL.DUCTO:
+        if (this.companerosEnDucto().length && !this.apoyoDado) return this.accionApoyo();
         return { tipo: 'sala2d', indice: i };
       case CEL.ESTACION:
         this.activarEstacion(i);
@@ -410,7 +471,7 @@
       case CEL.SALIDA:
         return { tipo: 'salida' };
       case CEL.NUCLEO:
-        return { tipo: 'jefe' };
+        return this.modo === 'carrera' ? { tipo: 'salida' } : { tipo: 'jefe' };
       case CEL.DECOR:
         W.HUD.mostrar(this.def.zona === 1 ? 'SUJETO EN CRIOGENIA. NO RESPONDE' : this.def.zona === 2 ? 'MAQUINARIA DE EXTRACCION. MEJOR NO TOCAR' :
           this.def.zona === 3 ? 'SERVIDOR DE LA IA. ZUMBA COMO SI PENSARA' : 'AL OTRO LADO: EL ESPACIO. Y TEMUKEITOR', 2.5);
@@ -428,6 +489,8 @@
     const dif = d.dificultad || 1;
     const datos = d.pista ? this.pistas[d.pista] : null;
     const conocida = datos ? W.Partida.conocePista(partida, datos.id) : false;
+    // Pistas repartidas: el título de la cerradura dice quién tiene la información que falta
+    const quien = datos && !conocida ? this.quienLee(d.pista) : '';
     const self = this;
     return {
       tipo: 'puzzle',
@@ -441,7 +504,7 @@
         tiempo: d.tiempo || C.TIEMPO_PUERTA[Math.min(3, dif) - 1],
         alFallar: riesgo ? 'terminar' : 'reiniciar',
         estilo: riesgo ? 'riesgo' : 'normal',
-        titulo: riesgo ? 'CERRADURA DE RIESGO' : undefined
+        titulo: quien ? 'PISTA: PREGUNTALE A ' + quien : riesgo ? 'CERRADURA DE RIESGO' : undefined
       },
       alTerminar: function (res) {
         if (res === 'exito') self.abrirPuerta(i);
@@ -498,6 +561,7 @@
     }
     if (remoto) W.HUD.mostrar('UN COMPANERO ABRIO UNA PUERTA', 2);
     else this.emitir({ t: 'puerta', i: i });
+    this.puertaAbierta(i);
   };
 
   // El ducto queda abierto (pasillo) si la sala se superó y tienes su objeto.
@@ -540,9 +604,10 @@
     jug.invulnerable = 2.0;     // invulnerabilidad breve al reaparecer
     jug.golpeX = jug.golpeY = 0;
     jug.atrapado = false;
+    jug.aturdido = 0;
     p.muertes++;
-    // En multijugador los objetos son del equipo y los enemigos los maneja el anfitrión
-    if (this.red) return;
+    // En el cooperativo los objetos son del equipo y los enemigos los maneja el anfitrión
+    if (this.modo === 'coop') return;
     W.Partida.restaurarObjetos(p);
     this.actualizarDuctos();
     for (const e of this.enemigos) e.reiniciar();
@@ -550,10 +615,14 @@
     for (const e of this.enemigos) if (e.tipo === 'guardian' && e.estado !== 'sellado') this.mapa.bloqueo[this.mapa.indice(Math.floor(e.x0), Math.floor(e.y0))] = 1;
   };
 
-  // ===================== MULTIJUGADOR =====================
-  // Los cambios compartidos (puertas, enemigos, salas, botiquines) se "emiten";
-  // red.js los envía a los demás, que los aplican con aplicarEvento().
-  Nivel.prototype.emitir = function (msg) { if (this.alEvento) this.alEvento(msg); };
+  // ===================== MULTIJUGADOR (base) =====================
+  // Los cambios compartidos se "emiten"; red.js los envía a los demás, que los aplican
+  // con aplicarEvento(). En versus solo viajan los eventos entre rivales.
+  Nivel.prototype.emitir = function (msg) {
+    if (!this.alEvento) return;
+    if (this.versus && !Nivel.EVENTOS_VS[msg.t] && !(msg.t === 'botiquin' && this.modo === 'combate')) return;
+    this.alEvento(msg);
+  };
 
   Nivel.prototype.enemigoPorId = function (id) {
     for (const e of this.enemigos) if (e.id === id) return e;
@@ -561,6 +630,7 @@
   };
 
   Nivel.prototype.aplicarEvento = function (m) {
+    if (this.versus) { this.aplicarEventoVs(m); return; }
     const e = m.id ? this.enemigoPorId(m.id) : null;
     switch (m.t) {
       case 'puerta': this.abrirPuerta(m.i, true); break;
@@ -574,11 +644,13 @@
       case 'activar': if (e && e.estado !== 'sellado') { e.estado = 'activo'; e.tAturdido = 0; } break;
       case 'sala': this.salaSuperada(m.objeto, true); break;
       case 'botiquin': this.quitarBotiquin(m.i); break;
+      case 'palanca': this.tirarPalanca(m.i, true); break;
     }
   };
 
   // Compañero atrapado al frente
   Nivel.prototype.companeroAlFrente = function (tolerancia) {
+    if (this.versus) return null;
     const jug = this.jug;
     for (const k in this.otros) {
       const o = this.otros[k];
@@ -629,12 +701,12 @@
     if (W.Audio) W.Audio.sfx('estacion');
   };
 
-  // Anfitrión: posición informada por un cliente
+  // Posición informada por otro jugador
   Nivel.prototype.actualizarOtro = function (puesto, m) {
     let o = this.otros[puesto];
     if (!o) o = this.otros[puesto] = { x: m.x, y: m.y };
     o.tx = m.x; o.ty = m.y; o.ang = m.a;
-    o.personaje = m.pe; o.vida = m.v; o.vidaMax = m.vm; o.estado = m.e;
+    o.personaje = m.pe; o.vida = m.v; o.vidaMax = m.vm; o.estado = m.e; o.f = m.f || 0;
     if (Math.hypot(o.x - m.x, o.y - m.y) > 3) { o.x = m.x; o.y = m.y; }   // teletransporte (reaparición)
   };
   Nivel.prototype.quitarOtro = function (puesto) { delete this.otros[puesto]; };
@@ -643,14 +715,15 @@
   const ESTADOS = { activo: 0, aturdido: 1, sellado: 2 };
   Nivel.prototype.armarEstado = function (miPuesto, miEstado) {
     const jug = this.jug, r = function (v) { return Math.round(v * 100) / 100; };
-    const jugadores = [{ s: miPuesto, x: r(jug.x), y: r(jug.y), a: r(jug.ang), pe: jug.p.id, v: jug.vida, vm: jug.vidaMax, e: miEstado }];
+    const jugadores = [{ s: miPuesto, x: r(jug.x), y: r(jug.y), a: r(jug.ang), pe: jug.p.id, v: jug.vida, vm: jug.vidaMax, e: miEstado, f: this.flagsLocal() }];
     for (const k in this.otros) {
       const o = this.otros[k];
-      jugadores.push({ s: +k, x: r(o.tx), y: r(o.ty), a: r(o.ang || 0), pe: o.personaje, v: o.vida, vm: o.vidaMax, e: o.estado });
+      jugadores.push({ s: +k, x: r(o.tx), y: r(o.ty), a: r(o.ang || 0), pe: o.personaje, v: o.vida, vm: o.vidaMax, e: o.estado, f: o.f || 0 });
     }
     return {
       t: 'estado', n: this.def.id, tiempo: r(this.tiempo),
-      en: this.enemigos.map(function (e) { return [r(e.x), r(e.y), r(e.ang), ESTADOS[e.estado], e.detecta ? 1 : 0]; }),
+      // En versus cada uno simula sus enemigos: no se envían
+      en: this.versus ? [] : this.enemigos.map(function (e) { return [r(e.x), r(e.y), r(e.ang), ESTADOS[e.estado], e.detecta ? 1 : 0]; }),
       jug: jugadores
     };
   };
@@ -660,23 +733,28 @@
   Nivel.prototype.aplicarEstado = function (m, miPuesto) {
     if (m.n !== this.def.id) return;
     if (Math.abs(m.tiempo - this.tiempo) > 0.3) this.tiempo = m.tiempo;
-    for (let k = 0; k < this.enemigos.length && k < m.en.length; k++) {
-      const e = this.enemigos[k], d = m.en[k];
-      if (e.tx === undefined) { e.x = d[0]; e.y = d[1]; }
-      e.tx = d[0]; e.ty = d[1]; e.ang = d[2];
-      const est = ESTADOS_INV[d[3]];
-      if (est === 'sellado' && e.estado !== 'sellado') this.aplicarEvento({ t: 'sellar', id: e.id });
-      else if (est !== 'sellado') e.estado = est;
-      e.detecta = !!d[4];
+    if (!this.versus) {
+      for (let k = 0; k < this.enemigos.length && k < m.en.length; k++) {
+        const e = this.enemigos[k], d = m.en[k];
+        if (e.tx === undefined) { e.x = d[0]; e.y = d[1]; }
+        e.tx = d[0]; e.ty = d[1]; e.ang = d[2];
+        const est = ESTADOS_INV[d[3]];
+        if (est === 'sellado' && e.estado !== 'sellado') this.aplicarEvento({ t: 'sellar', id: e.id });
+        else if (est !== 'sellado') e.estado = est;
+        e.detecta = !!d[4];
+      }
     }
     const vistos = {};
     for (const j of m.jug) {
       if (j.s === miPuesto) continue;
       vistos[j.s] = true;
-      this.actualizarOtro(j.s, { x: j.x, y: j.y, a: j.a, pe: j.pe, v: j.v, vm: j.vm, e: j.e });
+      this.actualizarOtro(j.s, { x: j.x, y: j.y, a: j.a, pe: j.pe, v: j.v, vm: j.vm, e: j.e, f: j.f });
     }
     for (const k in this.otros) if (!vistos[k]) delete this.otros[k];
   };
+
+  // Eventos que viajan entre rivales en versus (el resto del mundo es de cada jugador)
+  Nivel.EVENTOS_VS = { golpe: 1, emp: 1, mina: 1, minaBoom: 1, dron: 1, hackeo: 1, hackeoFin: 1, hackeoRes: 1, derrota: 1, meta: 1, ganador: 1 };
 
   W.Nivel = Nivel;
 })();

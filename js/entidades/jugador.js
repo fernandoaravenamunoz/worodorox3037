@@ -1,6 +1,7 @@
 // =====================================================
 // Jugador en el laberinto: posición, mirada, movimiento, colisiones,
-// vida, invulnerabilidad y empujes externos (descompresión, golpes)
+// vida, invulnerabilidad y empujes externos (descompresión, golpes).
+// Versus: escudo temporal (bloquea el daño) y aturdimiento por pulso EMP.
 // =====================================================
 (function () {
   'use strict';
@@ -26,6 +27,8 @@
     this.seguroX = this.x;        // última posición segura (fuera de trampas)
     this.seguroY = this.y;
     this.flashDanio = 0;
+    this.escudo = 0;              // versus: segundos de escudo activo
+    this.aturdido = 0;            // versus: segundos aturdido por un pulso EMP (no se mueve ni actúa)
   }
 
   // Intenta mover con colisión por ejes separados (permite deslizarse por paredes)
@@ -47,6 +50,7 @@
 
     // Dirección deseada (se normaliza para no ir más rápido en diagonal)
     let f = entrada.avance, s = entrada.lateral;
+    if (this.aturdido > 0) { f = 0; s = 0; }   // EMP: los servos de las piernas no responden
     const largo = Math.hypot(f, s);
     if (largo > 1) { f /= largo; s /= largo; }
 
@@ -77,13 +81,18 @@
     if (this.invulnerable > 0) this.invulnerable -= dt;
     if (this.flashDanio > 0) this.flashDanio -= dt;
     if (this.recarga > 0) this.recarga -= dt;
+    if (this.escudo > 0) this.escudo -= dt;
+    if (this.aturdido > 0) this.aturdido -= dt;
     if (this.ataque > 0) { this.ataque += dt * 3.2; if (this.ataque >= 1) this.ataque = 0; }
   };
 
   // Recibe daño. Devuelve true si el daño se aplicó.
+  // El escudo (versus) bloquea todo daño salvo el que ignora la invulnerabilidad
+  // (cerraduras de riesgo, sellados fallidos y minas, que se revisan aparte).
   Jugador.prototype.danar = function (n, ignorarInvulnerable) {
     if (n <= 0) return false;
     if (this.invulnerable > 0 && !ignorarInvulnerable) return false;
+    if (this.escudo > 0 && !ignorarInvulnerable) return false;
     this.vida = Math.max(0, this.vida - n);
     this.invulnerable = C.INVULNERABLE;
     this.flashDanio = 0.35;
@@ -98,7 +107,7 @@
   Jugador.prototype.volverASeguro = function () { this.x = this.seguroX; this.y = this.seguroY; };
 
   Jugador.prototype.atacar = function () {
-    if (this.recarga > 0) return false;
+    if (this.recarga > 0 || this.aturdido > 0) return false;
     this.recarga = this.p.recarga;
     this.ataque = 0.01;
     if (W.Audio) W.Audio.sfx(this.p.proyectil ? 'lanzar' : 'golpe');

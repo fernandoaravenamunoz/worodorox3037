@@ -22,6 +22,10 @@
       <button class="boton-tactil solo-3d solo-2d" id="btn-e" data-boton="e">LIBRETA</button>
       <button class="boton-tactil solo-3d solo-2d" id="btn-accion" data-boton="accion">USAR</button>
       <button class="boton-tactil solo-3d solo-2d" id="btn-pausa" data-boton="pausa">II</button>
+      <!-- Versus (solo en partidas de carrera o combate) -->
+      <button class="boton-tactil solo-vs" id="btn-poder" data-boton="poder">PODER</button>
+      <button class="boton-tactil solo-vs" id="btn-cambiar" data-boton="cambiar">&#8635;</button>
+      <button class="boton-tactil solo-vs" id="btn-escudo" data-boton="escudo">ESCUDO</button>
       <!-- Salas 2D -->
       <button class="boton-tactil solo-2d" id="btn-izq" data-boton="izq" data-mantener="1">&#9664;</button>
       <button class="boton-tactil solo-2d" id="btn-der" data-boton="der" data-mantener="1">&#9654;</button>
@@ -35,6 +39,7 @@
   <script src="js/config.js"></script>
   <script src="js/fuente.js"></script>
   <script src="js/motor3d/texturas.js"></script>
+  <script src="js/motor3d/texturas_red.js"></script>
   <script src="js/motor3d/mapa.js"></script>
   <script src="js/motor3d/raycaster.js"></script>
 
@@ -55,14 +60,17 @@
 
   <script src="js/juego/partida.js"></script>
   <script src="js/juego/nivel.js"></script>
+  <script src="js/juego/multijugador.js"></script>
   <script src="js/juego/jefe.js"></script>
   <script src="js/motor2d/plataformas.js"></script>
 
   <script src="js/input.js"></script>
   <script src="js/ui/hud.js"></script>
+  <script src="js/ui/hud_red.js"></script>
   <script src="js/ui/mapa.js"></script>
   <script src="js/ui/libreta.js"></script>
   <script src="js/ui/menus.js"></script>
+  <script src="js/ui/progreso.js"></script>
   <script src="js/audio/synth.js"></script>
 
   <!-- Multijugador (fase 10): PeerJS va incluido en el proyecto -->

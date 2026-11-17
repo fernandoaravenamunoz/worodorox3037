@@ -5,9 +5,12 @@
 //   titulo → historia → seleccion → jugando ⇄ (puzzle | verPista | mapa | libreta | pausa | sala2d)
 //   jugando → muerte → jugando        jugando → nivelCompleto → jugando (siguiente nivel)
 //   nivel 12: núcleo de la IA → puzzle 'jefe' → final → titulo
+//   multijugador: titulo → seleccion → redMenu → (redCodigo) → redLobby → jugando
+//   versus: jugando → vsFin (resultados) → redLobby
+//   titulo → progreso → titulo        pausa → (volver al último respaldo) → jugando
 //
-// main.js solo coordina: la lógica del laberinto está en juego/nivel.js,
-// la de las salas en motor2d/plataformas.js y la de los puzzles en puzzles/.
+// main.js solo coordina: la lógica del laberinto está en juego/nivel.js y
+// juego/multijugador.js, la de las salas en motor2d/plataformas.js y la de los puzzles en puzzles/.
 // =====================================================
 (function () {
   'use strict';
@@ -41,11 +44,19 @@
   let seleccionPara = 'solo';     // la selección de personaje es para 'solo' o 'red'
   let avisoTitulo = '';           // mensaje en el título (por ejemplo, desconexión)
   const RED = W.Red;
+  // Versus
+  let marcador = { victorias: {}, derrotas: {} };
+  let vsCerrado = false;          // anfitrión: ya se decidió el ganador
+  let hackeosResueltos = {};      // anfitrión: hackeos ya arbitrados
+  let vsResultado = null;
+  let confirmarRespaldo = false;  // el botón de volver al respaldo pide confirmación
+  let volverProgreso = 'titulo';
 
   // Nivel de fondo para la pantalla de título (no toca el guardado)
   const fondo = new W.Nivel(W.niveles[1], W.Partida.nueva('chispa'));
 
   function tactil() { return W.Entrada.tactil || matchMedia('(pointer: coarse)').matches; }
+  function tolerancia() { return W.Entrada.tactil ? C.ANGULO_APUNTAR_TACTIL : C.ANGULO_APUNTAR; }
 
   // Escala el contenedor para llenar la ventana manteniendo 16:9
   function ajustar() {
@@ -59,17 +70,22 @@
   // ---------- Cambio de estado ----------
   const MODOS = { jugando: '3d', sala2d: '2d' };
   function cambiar(nuevo) {
+    if (nuevo === 'pausa') confirmarRespaldo = false;
+    // Al vencer a la IA queda registrado en el progreso (antes de que se borre el guardado)
+    if (nuevo === 'final' && partida) W.Progreso.registrar(partida, true);
     estado = nuevo;
     tEstado = 0;
     W.Entrada.fijarModo(MODOS[nuevo] || 'ui');
+    // Los botones táctiles del versus solo aparecen en una partida versus
+    document.body.classList.toggle('versus', !!(nivel && nivel.versus && RED.enJuego));
     musicaSegunEstado();
   }
   function musicaSegunEstado() {
     if (!W.Audio) return;
-    if (estado === 'titulo' || estado === 'historia' || estado === 'seleccion' || estado.indexOf('red') === 0) W.Audio.musica('titulo');
+    if (estado === 'titulo' || estado === 'historia' || estado === 'progreso' || estado === 'seleccion' || estado.indexOf('red') === 0) W.Audio.musica('titulo');
     else if (estado === 'sala2d') W.Audio.musica('sala');
-    else if (estado === 'final') W.Audio.musica('final');
-    else if (estado === 'jugando' && nivel) W.Audio.musica('z' + nivel.def.zona);
+    else if (estado === 'final' || estado === 'vsFin') W.Audio.musica('final');
+    else if (estado === 'jugando' && nivel) W.Audio.musica(nivel.versus ? 'jefe' : 'z' + nivel.def.zona);
   }
 
   // ---------- Menús ----------
@@ -78,6 +94,7 @@
     { texto: 'CONTINUAR', visible: function () { return W.Partida.hayGuardado(); }, accion: continuar },
     { texto: 'NUEVA PARTIDA', accion: function () { seleccionPara = 'solo'; cambiar('historia'); } },
     { texto: 'MULTIJUGADOR', accion: function () { seleccionPara = 'red'; avisoTitulo = ''; cambiar('seleccion'); } },
+    { texto: 'PROGRESO', visible: function () { return W.Progreso.hay(); }, accion: function () { volverProgreso = 'titulo'; cambiar('progreso'); } },
     { texto: textoSonido, accion: function () { W.Audio.alternar(); } }
   ], 80);
   const menuRed = new W.Menus.Menu([
@@ -88,9 +105,18 @@
   ], 70, 140);
   const menuPausa = new W.Menus.Menu([
     { texto: 'CONTINUAR', accion: function () { cambiar(volverDe); } },
+    // Volver al último punto de control (pide confirmar; no está en el combate)
+    {
+      texto: function () { return confirmarRespaldo ? 'CONFIRMAR: VOLVER AL RESPALDO' : 'VOLVER AL ULTIMO RESPALDO'; },
+      visible: function () { return !!nivel && nivel.modo !== 'combate'; },
+      accion: function () {
+        if (!confirmarRespaldo) { confirmarRespaldo = true; return; }
+        volverAlRespaldo();
+      }
+    },
     { texto: 'LIBRETA', accion: function () { abrirLibreta(volverDe); } },
     { texto: textoSonido, accion: function () { W.Audio.alternar(); } },
-    { texto: 'SALIR AL TITULO', accion: function () { sala = null; RED.salir(); cambiar('titulo'); } }
+    { texto: 'SALIR AL TITULO', accion: function () { sala = null; RED.salir(); nivel = null; cambiar('titulo'); } }
   ], 70);
 
   // ---------- Partida y niveles ----------
@@ -109,9 +135,11 @@
     nivel = new W.Nivel(def, partida);
     sala = null;
     if (RED.enJuego) configurarRed(nivel);
-    W.HUD.zona = 'NIVEL ' + def.id;
+    W.HUD.zona = nivel.modo === 'combate' ? 'ARENA ' + def.nombre : (nivel.modo === 'carrera' ? 'CARRERA - NIVEL ' : 'NIVEL ') + def.id;
     tCartel = 0;
     cambiar('jugando');
+    if (nivel.modo === 'carrera') W.HUD.mostrar('CARRERA! PODERES: 1 A 4 - ESCUDO: R', 5);
+    else if (nivel.modo === 'combate') W.HUD.mostrar('COMBATE! GANA QUIEN LOGRE ' + W.configRed.VS.VICTORIAS + ' VICTORIAS', 5);
   }
 
   function abrirLibreta(volver, idPreferido) {
@@ -125,14 +153,29 @@
     puzzleCtx = { alTerminar: alTerminar, volverA: volverA || 'jugando' };
     cambiar('puzzle');
   }
+  // Cierra el puzzle abierto sin resolverlo (hackeo decidido por el árbitro, apoyo remoto...)
+  function cerrarPuzzle() {
+    if (!puzzle || !puzzleCtx) return null;
+    const pc = puzzleCtx;
+    puzzle = null; puzzleCtx = null;
+    cambiar(pc.volverA);
+    return pc;
+  }
 
   // Ejecuta una acción devuelta por el nivel
   function ejecutarAccion(acc) {
     if (!acc) return;
-    if (acc.tipo === 'puzzle') abrirPuzzle(acc.puzzle, acc.opciones, acc.alTerminar, 'jugando');
-    else if (acc.tipo === 'verPista') { pistaVista = acc.datos; cambiar('verPista'); }
+    if (acc.tipo === 'puzzle') {
+      abrirPuzzle(acc.puzzle, acc.opciones, acc.alTerminar, 'jugando');
+      if (acc.hackeo) puzzleCtx.hackeo = acc.hackeo;
+    } else if (acc.tipo === 'verPista') { pistaVista = acc.datos; cambiar('verPista'); }
     else if (acc.tipo === 'sala2d') entrarSala();
     else if (acc.tipo === 'salida') {
+      if (nivel.versus) {
+        alArbitro({ t: 'meta' });
+        W.HUD.mostrar('LLEGASTE A LA SALIDA...', 2);
+        return;
+      }
       if (RED.enJuego) nivel.emitir({ t: 'salida' });
       terminarNivel();
     } else if (acc.tipo === 'jefe') iniciarJefe();
@@ -149,15 +192,17 @@
       objetoYaObtenido: objetoYa,
       alTerminal: function (term, alFinal) {
         const datos = term.pista ? nivel.pistas[term.pista] : null;
+        const conocida = datos ? W.Partida.conocePista(partida, datos.id) : false;
+        const quien = datos && !conocida ? nivel.quienLee(term.pista) : '';
         abrirPuzzle(term.puzzle || (datos ? datos.tipo : 'codigo'), {
           dificultad: term.dificultad || (datos ? datos.dificultad : 1),
           rnd: W.texturas.azar((Math.random() * 1e9) | 0),
           pista: datos,
-          pistaConocida: datos ? W.Partida.conocePista(partida, datos.id) : false,
+          pistaConocida: conocida,
           tiempo: 75,
           alFallar: 'reiniciar',
           estilo: 'normal',
-          titulo: 'TERMINAL DE MANTENIMIENTO'
+          titulo: quien ? 'TERMINAL - LA PISTA LA LEE ' + quien : 'TERMINAL DE MANTENIMIENTO'
         }, alFinal, 'sala2d');
       }
     });
@@ -191,22 +236,43 @@
 
   // ---------- Multijugador ----------
   function configurarRed(n) {
-    n.red = { rol: RED.rol, puesto: RED.puesto };
-    n.esCliente = RED.rol === 'cliente';
+    n.prepararRed({ modo: RED.modo, rol: RED.rol, puesto: RED.puesto, jugadores: RED.jugadores, repartidas: RED.repartidas });
     n.alEvento = function (e) { e.n = n.def.id; RED.evento(e); };
+    n.alArbitro = alArbitro;
     n.alDanioRemoto = function (puesto, d) { RED.danioA(puesto, d); };
   }
+  function enviar(e) { if (nivel) e.n = nivel.def.id; RED.evento(e); }
+  // Se envía a todos y se aplica también aquí (el anfitrión no recibe sus propios eventos)
+  function difundirYAplicar(e) { enviar(e); e.de = RED.puesto; manejarEvento(e); }
+  // Lo decide el anfitrión: se envía y, si este equipo es el anfitrión, se arbitra aquí mismo
+  function alArbitro(e) { enviar(e); e.de = RED.puesto; if (RED.esAnfitrion()) arbitrar(e); }
+
   function hayCompaneros() { return nivel && Object.keys(nivel.otros).length > 0; }
   function estadoLocal() {
     if (!nivel) return 'ocupado';
     if (nivel.jug.atrapado) return 'atrapado';
+    if (nivel.caidoVs()) return 'caido';
     if (estado === 'jugando') return 'activo';
     if (estado === 'sala2d' || (estado === 'puzzle' && puzzleCtx && puzzleCtx.volverA === 'sala2d')) return 'sala';
     return 'ocupado';
   }
-  // Sin vida: con compañeros quedas atrapado esperando rescate; si no, mueres
+  // Sin vida. Cooperativo: con compañeros quedas atrapado esperando rescate.
+  // Carrera: mueres y vuelves a tu estación. Combate: caes unos segundos y vuelves a la arena.
   function vidaAgotada() {
     const jug = nivel.jug;
+    if (RED.enJuego && nivel.versus) {
+      if (nivel.caidoVs()) return;
+      difundirYAplicar({ t: 'derrota', s: RED.puesto, por: nivel.autorDerrota() });
+      if (nivel.modo === 'combate') {
+        nivel.caerEnCombate();
+        if (estado !== 'jugando') { puzzle = null; puzzleCtx = null; cambiar('jugando'); }
+        if (W.Audio) W.Audio.sfx('muerte');
+        W.Entrada.vibrar(300);
+        return;
+      }
+      if (estado !== 'vsFin') morir();
+      return;
+    }
     if (RED.enJuego && hayCompaneros() && estado !== 'sala2d') {
       if (!jug.atrapado) {
         jug.atrapado = true;
@@ -221,29 +287,163 @@
     morir();
   }
 
+  // ----- Arbitraje (solo el anfitrión) -----
+  function arbitrar(e) {
+    if (!RED.esAnfitrion() || !nivel) return;
+    if (e.t === 'meta' && nivel.modo === 'carrera' && !vsCerrado) {
+      vsCerrado = true;
+      difundirYAplicar({ t: 'ganador', s: e.de, motivo: 'LLEGO PRIMERO A LA SALIDA' });
+    } else if (e.t === 'hackeoFin' && !hackeosResueltos[e.id]) {
+      hackeosResueltos[e.id] = true;
+      difundirYAplicar({ t: 'hackeoRes', id: e.id, gana: e.gana, a: e.a, s: e.s });
+    }
+  }
+  function revisarGanadorCombate() {
+    if (!RED.esAnfitrion() || !nivel || nivel.modo !== 'combate' || vsCerrado) return;
+    for (const p in marcador.victorias) {
+      if (marcador.victorias[p] >= W.configRed.VS.VICTORIAS) {
+        vsCerrado = true;
+        difundirYAplicar({ t: 'ganador', s: +p, motivo: W.configRed.VS.VICTORIAS + ' VICTORIAS' });
+        return;
+      }
+    }
+  }
+
+  // ----- Eventos de la partida -----
+  function manejarEvento(e) {
+    if (!nivel || (e.n && e.n !== nivel.def.id)) return;
+    const yo = RED.puesto;
+    switch (e.t) {
+      case 'salida': terminarNivel(); break;
+      case 'final': puzzle = null; puzzleCtx = null; cambiar('final'); break;
+      case 'rescatar': if (e.s === yo) nivel.rescatado(); break;
+      case 'apoyo': if (e.s && e.s.indexOf(yo) >= 0) aplicarApoyo(e.de); break;
+      case 'ganador': mostrarResultados(e); break;
+      case 'derrota': registrarDerrota(e); break;
+      case 'hackeo': if (e.s === yo) defenderHackeo(e); break;
+      case 'hackeoRes': resolverHackeo(e); break;
+      case 'meta': case 'hackeoFin': break;   // los decide el árbitro
+      default: nivel.aplicarEvento(e);
+    }
+  }
+
+  // Apoyo desde el laberinto: el terminal del ducto queda resuelto y recuperas vida
+  function aplicarApoyo(de) {
+    if (puzzle && puzzleCtx && puzzleCtx.volverA === 'sala2d') {
+      const pc = cerrarPuzzle();
+      if (pc && pc.alTerminar) pc.alTerminar('exito');
+    }
+    if (!sala) return;
+    sala.terminalResuelto = true;
+    if (sala.persecucion) sala.persecucion.x -= 80;
+    sala.jugVida.curar(3);
+    sala.mensaje = 'APOYO DE ' + RED.nombreDe(de) + ': TERMINAL ABIERTO Y +3 VIDA';
+    sala.tMensaje = 3;
+    if (W.Audio) W.Audio.sfx('estacion');
+  }
+
+  function registrarDerrota(e) {
+    const yo = RED.puesto, s = e.s, por = e.por;
+    marcador.derrotas[s] = (marcador.derrotas[s] || 0) + 1;
+    if (por >= 0 && por !== s) marcador.victorias[por] = (marcador.victorias[por] || 0) + 1;
+    if (por === yo && s !== yo) {
+      nivel.recompensa();
+      W.HUD.mostrar('DERRIBASTE A ' + RED.nombreDe(s) + ': +' + W.configRed.VS.RECOMPENSA_VIDA + ' VIDA', 2.5);
+      if (W.Audio) W.Audio.sfx('sellado');
+    } else if (s !== yo) {
+      W.HUD.mostrar(por >= 0 ? RED.nombreDe(por) + ' DERRIBO A ' + RED.nombreDe(s) : RED.nombreDe(s) + ' CAYO', 2);
+    }
+    revisarGanadorCombate();
+  }
+
+  function defenderHackeo(e) {
+    W.HUD.mostrar(RED.nombreDe(e.de) + ' TE ESTA HACKEANDO!', 2.5);
+    if (W.Audio) W.Audio.sfx('alarma');
+    // Solo se puede defender quien está en el laberinto (no en un puzzle, menú o ducto)
+    if (estado !== 'jugando' || nivel.caidoVs() || nivel.jug.atrapado) return;
+    const yo = RED.puesto;
+    abrirPuzzle(e.tipo, nivel.opcionesHackeo(e.tipo, e.semilla, 'BLOQUEA EL HACKEO DE ' + RED.nombreDe(e.de), false), function (res) {
+      if (res === 'exito') alArbitro({ t: 'hackeoFin', id: e.id, gana: 's', a: e.de, s: yo });
+    }, 'jugando');
+    puzzleCtx.hackeo = e.id;
+  }
+
+  function resolverHackeo(e) {
+    const yo = RED.puesto;
+    if (puzzle && puzzleCtx && puzzleCtx.hackeo === e.id) cerrarPuzzle();
+    if (e.s === yo) {
+      if (e.gana === 'a') {
+        nivel.volverAPunto();
+        W.HUD.mostrar('HACKEADO POR ' + RED.nombreDe(e.a) + ': VUELVES A TU PUNTO DE CONTROL', 3);
+        if (W.Audio) W.Audio.sfx('error');
+      } else {
+        W.HUD.mostrar('BLOQUEASTE EL HACKEO DE ' + RED.nombreDe(e.a), 2.5);
+        if (W.Audio) W.Audio.sfx('acierto');
+      }
+    } else if (e.a === yo) {
+      W.HUD.mostrar(e.gana === 'a' ? 'HACKEO EXITOSO: ' + RED.nombreDe(e.s) + ' VUELVE A SU PUNTO DE CONTROL' : RED.nombreDe(e.s) + ' BLOQUEO TU HACKEO', 3);
+      if (W.Audio) W.Audio.sfx(e.gana === 'a' ? 'acierto' : 'error');
+    }
+  }
+
+  function reiniciarMarcador() {
+    marcador = { victorias: {}, derrotas: {} };
+    for (const j of RED.jugadores) { marcador.victorias[j.puesto] = 0; marcador.derrotas[j.puesto] = 0; }
+    vsCerrado = false; hackeosResueltos = {}; vsResultado = null;
+  }
+
+  function mostrarResultados(e) {
+    if (estado === 'vsFin') return;
+    const filas = RED.jugadores.map(function (j) {
+      return { puesto: j.puesto, nombre: W.PERSONAJES[j.personaje].nombre, victorias: marcador.victorias[j.puesto] || 0, derrotas: marcador.derrotas[j.puesto] || 0 };
+    }).sort(function (a, b) { return (b.puesto === e.s) - (a.puesto === e.s) || b.victorias - a.victorias || a.derrotas - b.derrotas; });
+    const ganador = RED.jugadores.find(function (j) { return j.puesto === e.s; });
+    vsResultado = { modo: nivel ? nivel.modo : RED.modo, ganador: e.s, motivo: e.motivo || '', personaje: ganador ? ganador.personaje : null, filas: filas };
+    puzzle = null; puzzleCtx = null; sala = null;
+    vsCerrado = true;
+    if (W.Audio) W.Audio.sfx(e.s === RED.puesto ? 'nivel' : 'muerte');
+    cambiar('vsFin');
+  }
+
+  // Usa un poder del versus (teclas 1-4, R o botones táctiles)
+  function usarPoder(nombre) {
+    if (!nombre || !nivel || !nivel.versus) return;
+    ejecutarAccion(nivel.usarPoder(nombre, tolerancia()));
+  }
+
   RED.al.iniciar = function (n, semilla) {
     partida = W.Partida.nueva(RED.personaje);
     partida.semilla = semilla;
     partida.nivel = n;
     partida.sinGuardar = true;
+    reiniciarMarcador();
+    puzzle = null; puzzleCtx = null;
     iniciarNivel(n);
   };
-  RED.al.estado = function (m) { if (nivel && nivel.esCliente) nivel.aplicarEstado(m, RED.puesto); };
+  RED.al.estado = function (m) { if (nivel && RED.enJuego) nivel.aplicarEstado(m, RED.puesto); };
   RED.al.yo = function (puesto, m) { if (nivel && m.n === nivel.def.id) nivel.actualizarOtro(puesto, m); };
+  RED.al.lobby = function () {
+    // Alguien salió durante la partida: las pistas repartidas se reasignan entre los que quedan
+    if (nivel && RED.enJuego && nivel.modo === 'coop') nivel.repartirPistas(RED.jugadores.map(function (j) { return j.puesto; }));
+  };
   RED.al.salio = function (puesto) {
-    if (nivel) nivel.quitarOtro(puesto);
-    if (RED.enJuego) W.HUD.mostrar('UN JUGADOR SE DESCONECTO', 3);
+    if (!nivel || !RED.enJuego) return;
+    nivel.quitarOtro(puesto);
+    W.HUD.mostrar('UN JUGADOR SE DESCONECTO', 3);
+    // Versus: si no queda ningún rival, gana el anfitrión
+    if (nivel.versus && !vsCerrado && estado !== 'vsFin' && !hayCompaneros()) {
+      vsCerrado = true;
+      difundirYAplicar({ t: 'ganador', s: RED.puesto, motivo: 'LOS RIVALES SE DESCONECTARON' });
+    }
   };
   RED.al.danio = function (d) {
     if (!nivel || estado !== 'jugando') return;
     nivel.danarObjetivo(null, d.n, d.motivo, d.gx, d.gy);
   };
   RED.al.evento = function (e) {
-    if (!nivel || (e.n && e.n !== nivel.def.id)) return;
-    if (e.t === 'salida') terminarNivel();
-    else if (e.t === 'final') { puzzle = null; puzzleCtx = null; cambiar('final'); }
-    else if (e.t === 'rescatar') { if (e.s === RED.puesto) nivel.rescatado(); }
-    else nivel.aplicarEvento(e);
+    if (!nivel || !e) return;
+    if (RED.esAnfitrion()) arbitrar(e);
+    manejarEvento(e);
   };
   RED.al.desconectado = function (motivo, enJuego) {
     if (enJuego || estado.indexOf('red') !== 0) {
@@ -320,11 +520,23 @@
         for (const ev of eventos) {
           if (ev === 'perdioBloqueo' || ev === 'tecla:Escape' || ev === 'boton:pausa') { volverDe = 'jugando'; cambiar('pausa'); return; }
           if (esAccion(ev) || (ev === 'clicLibre' && W.Entrada.modoArrastre)) {
-            ejecutarAccion(nivel.accion(W.Entrada.tactil ? C.ANGULO_APUNTAR_TACTIL : C.ANGULO_APUNTAR));
+            ejecutarAccion(nivel.accion(tolerancia()));
             if (estado !== 'jugando') return;
           }
           if (ev === 'tecla:KeyQ' || ev === 'boton:q') { cambiar('mapa'); return; }
           if (ev === 'tecla:KeyE' || ev === 'boton:e') { abrirLibreta('jugando'); return; }
+          // Versus: poderes (1-4), escudo (R) y botones táctiles PODER / CAMBIAR / ESCUDO
+          if (nivel.versus) {
+            const m = /^tecla:(?:Digit|Numpad)([1-4])$/.exec(ev);
+            if (m) { usarPoder(nivel.poderes()[+m[1] - 1]); if (estado !== 'jugando') return; }
+            if (ev === 'tecla:KeyR' || ev === 'boton:escudo') usarPoder('escudo');
+            if (ev === 'boton:poder') { usarPoder(nivel.poderes()[nivel.vs.sel]); if (estado !== 'jugando') return; }
+            if (ev === 'boton:cambiar') {
+              nivel.vs.sel = (nivel.vs.sel + 1) % nivel.poderes().length;
+              W.HUD.mostrar('PODER: ' + W.configRed.VS.NOMBRE_PODER[nivel.poderes()[nivel.vs.sel]], 1);
+              if (W.Audio) W.Audio.sfx('clic');
+            }
+          }
         }
         break;
 
@@ -389,6 +601,18 @@
           cambiar('titulo');
         }
         break;
+
+      case 'progreso':
+        if (tEstado > 0.3 && (clics.some(function (c) { return W.Progreso.clic(c.x, c.y); }) || teclas.length)) cambiar(volverProgreso);
+        break;
+
+      case 'vsFin':
+        if (tEstado > 2 && (clics.length || teclas.length)) {
+          RED.volverASala();
+          nivel = null; partida = null; sala = null;
+          cambiar(RED.activo ? 'redLobby' : 'titulo');
+        }
+        break;
     }
   }
 
@@ -401,29 +625,30 @@
       nivel.jugOcupado = true;
       nivel.actualizarMundo(dt);
     }
-    if (RED.enJuego && nivel) {
+    if (RED.enJuego && nivel && estado !== 'vsFin') {
       RED.actualizar(dt,
         function () { return nivel.armarEstado(RED.puesto, estadoLocal()); },
-        function () { const j = nivel.jug; return { n: nivel.def.id, x: j.x, y: j.y, a: j.ang, pe: j.p.id, v: j.vida, vm: j.vidaMax, e: estadoLocal() }; });
+        function () { const j = nivel.jug; return { n: nivel.def.id, x: j.x, y: j.y, a: j.ang, pe: j.p.id, v: j.vida, vm: j.vidaMax, e: estadoLocal(), f: nivel.flagsLocal() }; });
     }
+    if (!nivel && estado !== 'titulo') return;
 
     if (estado === 'jugando') {
       nivel.actualizar(dt, entrada);
-      W.HUD.aviso = nivel.aviso(W.Entrada.tactil ? C.ANGULO_APUNTAR_TACTIL : C.ANGULO_APUNTAR);
+      W.HUD.aviso = nivel.aviso(tolerancia());
       tCartel += dt;
       const jug = nivel.jug;
       if (jug.atrapado) {
         jug.tAtrapado -= dt;
         if (jug.tAtrapado <= 0 || !hayCompaneros()) { jug.atrapado = false; morir(); }
-      } else if (jug.vida <= 0) vidaAgotada();
+      } else if (jug.vida <= 0 && !nivel.caidoVs()) vidaAgotada();
     } else if (estado === 'puzzle') {
       puzzle.actualizar(dt, { clics: [], teclas: [] });
-      if (puzzle.terminado) {
+      if (puzzle && puzzle.terminado) {
         const pc = puzzleCtx, res = puzzle.resultado;
         puzzle = null; puzzleCtx = null;
         cambiar(pc.volverA);
         if (pc.alTerminar) pc.alTerminar(res);
-        if (estado !== 'final' && nivel && nivel.jug.vida <= 0 && !nivel.jug.atrapado) vidaAgotada();
+        if (estado !== 'final' && estado !== 'vsFin' && nivel && nivel.jug.vida <= 0 && !nivel.jug.atrapado && !nivel.caidoVs()) vidaAgotada();
       }
     } else if (estado === 'sala2d') {
       sala.actualizar(dt, entrada, sala._eventos || { salto: false, accion: false });
@@ -437,6 +662,17 @@
     } else if (estado === 'titulo') {
       fondo.jug.ang += dt * 0.12;
     }
+  }
+
+  // Botón de reinicio: vuelve a la última estación de respaldo (como una reimpresión:
+  // se conservan puertas y pistas; se pierden los objetos tomados desde ese respaldo)
+  function volverAlRespaldo() {
+    if (!nivel) return;
+    puzzle = null; puzzleCtx = null; sala = null;
+    nivel.reaparecer();
+    cambiar('jugando');
+    W.HUD.mostrar('DE VUELTA EN TU ULTIMO RESPALDO', 2.5);
+    if (W.Audio) W.Audio.sfx('estacion');
   }
 
   function morir() {
@@ -463,8 +699,8 @@
       case 'redMenu':
         W.raycaster.render(ctx, fondo.jug, fondo.mapa, fondo.sprites(), null);
         ctx.fillStyle = 'rgba(7,6,13,0.7)'; ctx.fillRect(0, 0, C.ANCHO, C.ALTO);
-        W.HUD.texto(ctx, 'MULTIJUGADOR - COOPERATIVO', C.ANCHO / 2, 30, PAL.magenta, 2, 'centro');
-        W.HUD.texto(ctx, 'JUEGAS CON ' + W.PERSONAJES[RED.personaje].nombre + '. HASTA 4 JUGADORES POR INTERNET', C.ANCHO / 2, 50, PAL.gris, 1, 'centro');
+        W.HUD.texto(ctx, 'MULTIJUGADOR', C.ANCHO / 2, 30, PAL.magenta, 2, 'centro');
+        W.HUD.texto(ctx, 'JUEGAS CON ' + W.PERSONAJES[RED.personaje].nombre + '. COOPERATIVO O VERSUS, HASTA 4 POR INTERNET', C.ANCHO / 2, 50, PAL.gris, 1, 'centro');
         menuRed.dibujar(ctx);
         if (RED.error) W.HUD.texto(ctx, RED.error, C.ANCHO / 2, 160, PAL.rojo, 1, 'centro');
         break;
@@ -480,7 +716,7 @@
         break;
       case 'puzzle':
         if (puzzleCtx && puzzleCtx.volverA === 'sala2d' && sala) sala.dibujar(ctx); else if (nivel) dibujarMundo();
-        puzzle.dibujar(ctx);
+        if (puzzle) puzzle.dibujar(ctx);
         break;
       case 'verPista': dibujarMundo(); W.Menus.verPista(ctx, pistaVista, t); break;
       case 'mapa': W.MapaUI.dibujar(ctx, nivel, tiempo); break;
@@ -499,6 +735,8 @@
         break;
       case 'nivelCompleto': dibujarMundo(); W.Menus.nivelCompleto(ctx, tEstado, nivel.def, partida, t); break;
       case 'final': W.Menus.final(ctx, tEstado, partida ? partida.personaje : 'chispa', partida || W.Partida.nueva('chispa'), t); break;
+      case 'progreso': W.Progreso.dibujar(ctx, tiempo); break;
+      case 'vsFin': W.HUD.resultadosVs(ctx, vsResultado, tEstado, t, RED.puesto); break;
     }
   }
 
@@ -540,7 +778,7 @@
   // Acceso para depurar desde la consola
   W.juego = {
     get nivel() { return nivel; }, get partida() { return partida; }, get estado() { return estado; },
-    get sala() { return sala; }, get puzzle() { return puzzle; }, red: RED,
+    get sala() { return sala; }, get puzzle() { return puzzle; }, get marcador() { return marcador; }, red: RED,
     irANivel: function (n, personaje) { partida = partida || W.Partida.nueva(personaje || 'chispa'); partida.nivel = n; partida.punto = null; iniciarNivel(n); },
     entrarSala: function () { entrarSala(); },
     // Prueba cualquier puzzle desde la consola: W.juego.probarPuzzle('luces', 3)

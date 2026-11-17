@@ -55,6 +55,12 @@ W.config = {
   TIEMPO_SELLADO_EXTRA_DIF: 3,   // segundos extra por cada nivel de dificultad sobre 1
   BONO_ATURDIDO: 8,              // segundos extra si el enemigo está aturdido
 
+  // Puertas de doble palanca: segundos que una palanca queda activa después de tirarla.
+  // Con compañeros en la partida la ventana es corta (hay que tirarlas a la vez);
+  // jugando solo hay tiempo para correr de una palanca a la otra.
+  VENTANA_PALANCA: 1.2,
+  VENTANA_PALANCA_SOLO: 8,
+
   // Salas 2D (en píxeles internos)
   T2D: 10,                // tamaño de cada baldosa
   GRAVEDAD: 820,
@@ -107,15 +113,18 @@ W.CELDA = {
   PUERTA_TARJETA: 10,// necesita un objeto obtenido en una sala 2D
   SALIDA: 11,       // compuerta de salida del nivel
   APLASTADOR: 12,   // compuerta que aplasta (trampa, alterna sólida/vacía)
-  NUCLEO: 13        // núcleo de la IA (jefe final)
+  NUCLEO: 13,       // núcleo de la IA (jefe final)
+  PALANCA: 14,      // palanca en la pared (abre la puerta de doble palanca más cercana)
+  PUERTA_PALANCA: 15// puerta que se abre con todas sus palancas activas a la vez
 };
 
 // Caracteres de los mapas de nivel → código de casilla.
 // Los dígitos (puertas) y las letras de W.HOLOGRAMAS se definen en la "leyenda" de cada nivel.
+// Una puerta de doble palanca es un dígito con { palancas: true } en la leyenda.
 W.CARACTERES = {
   '.': 0, ' ': 0,
   '#': 1, 'N': 2, 'T': 3, 'C': 6,
-  'Y': 7, 'S': 8, 'X': 11, 'B': 13
+  'Y': 7, 'S': 8, 'X': 11, 'B': 13, 'P': 14
 };
 
 // Letras que representan hologramas con pista (se definen en la leyenda del nivel)
@@ -143,7 +152,9 @@ W.TIPOS = {
   10: { nombre: 'PUERTA DE TARJETA', aviso: 'LECTOR DE TARJETA' },
   11: { nombre: 'SALIDA', aviso: 'COMPUERTA DE SALIDA' },
   12: { nombre: 'APLASTADOR' },
-  13: { nombre: 'NUCLEO', aviso: 'NUCLEO DE LA IA' }
+  13: { nombre: 'NUCLEO', aviso: 'NUCLEO DE LA IA' },
+  14: { nombre: 'PALANCA', aviso: 'TIRAR DE LA PALANCA' },
+  15: { nombre: 'PUERTA DE DOBLE PALANCA', aviso: 'PUERTA DE DOBLE PALANCA' }
 };
 
 // Nombres de las zonas (1 a 4)

@@ -2,6 +2,7 @@
 // NIVEL 10 - HANGAR (Zona 4: Hangar)
 // Plano: gran hangar con bahias de lanzamiento
 // Leyenda de los mapas: ver nivel01.js. Validar con: node scripts/validar-niveles.js
+// La puerta 3 es de doble palanca: sus palancas P estan en la bahia sureste.
 // =====================================================
 W.niveles = W.niveles || {};
 
@@ -21,9 +22,9 @@ W.niveles[10] = {
     '#....#............#.l..S',
     'S....#..b..N..N...#....#',
     '#.................##3###',
-    '#....#..........^^#....#',
+    '#....#..........^^P....#',
     'Y....#..N..f..N...2u.<.#',
-    '#....#..........vv#>...#',
+    '#....#..........vv#>...P',
     '#h...##C##C##C##C##....#',
     '########################'
   ],
@@ -34,7 +35,7 @@ W.niveles[10] = {
     b: { pista: 'p2' },
     '1': { puzzle: 'serie', dificultad: 3 },
     '2': { puzzle: 'simon', dificultad: 3, pista: 'p1', riesgo: true },
-    '3': { puzzle: 'luces', dificultad: 3 },
+    '3': { palancas: true },                 // puerta de doble palanca
     '4': { objeto: 'LLAVE DE HANGAR' }
   },
   pistas: {

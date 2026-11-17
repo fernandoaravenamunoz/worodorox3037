@@ -51,9 +51,10 @@ body {
   touch-action: none;
 }
 
-/* Los botones aparecen solo con pantalla táctil y según el modo (laberinto / sala 2D) */
+/* Los botones aparecen solo con pantalla táctil y según el modo (laberinto / sala 2D / versus) */
 .tactil.modo-3d .solo-3d,
-.tactil.modo-2d .solo-2d { display: block; }
+.tactil.modo-2d .solo-2d,
+.tactil.modo-3d.versus .solo-vs { display: block; }
 .boton-tactil.activo { background: rgba(34, 228, 255, 0.4); }
 
 /* Botón de acción grande (USAR / ARMA) */
@@ -85,6 +86,35 @@ body {
   height: 9vh;
   font-size: 3vh;
   border-color: #8d93ad;
+}
+
+/* Versus: PODER (usa el poder elegido), CAMBIAR (elige otro) y ESCUDO */
+#btn-poder {
+  right: calc(4% + 21vh);
+  bottom: 30%;
+  width: 15vh;
+  height: 15vh;
+  border-radius: 50%;
+  border-color: #ff2bd6;
+  color: #ffd0f5;
+  font-size: 2.6vh;
+}
+#btn-cambiar {
+  right: calc(4% + 37vh);
+  bottom: 36%;
+  width: 9vh;
+  height: 9vh;
+  border-radius: 50%;
+  border-color: #ff2bd6;
+  color: #ffd0f5;
+  font-size: 4vh;
+}
+#btn-escudo {
+  right: calc(4% + 21vh);
+  bottom: 9%;
+  width: 15vh;
+  height: 10vh;
+  font-size: 2.4vh;
 }
 
 /* Salas 2D: flechas a la izquierda, salto a la derecha */

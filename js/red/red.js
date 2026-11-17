@@ -1,15 +1,19 @@
 // =====================================================
-// Sesión multijugador (cooperativo, fase 10a)
+// Sesión multijugador (cooperativo y versus)
 //
-// Modelo: el ANFITRIÓN (quien crea la partida) simula los enemigos y reparte el
-// estado ~15 veces por segundo. Cada jugador mueve a su propio personaje y avisa
-// sus acciones como "eventos" (abrir puerta, aturdir, sellar, sala 2D, rescate...).
+// Modelo: el ANFITRIÓN (quien crea la partida) reparte el estado ~15 veces por segundo
+// y hace de árbitro (quién llegó primero, quién ganó un hackeo, el marcador del combate).
+// Cada jugador mueve a su propio personaje y avisa sus acciones como "eventos".
+//   Cooperativo: el anfitrión simula los enemigos; puertas, ductos y botiquines se comparten.
+//   Versus (carrera y combate): cada jugador simula su propio mundo; se comparten
+//   las posiciones y los ataques entre jugadores.
 //
 // Mensajes:
 //   cliente → anfitrión : hola, yo (posición), evento
 //   anfitrión → cliente : bienvenido, lobby, rechazo, iniciar, estado, evento, danio
 //
-// main.js se conecta con W.Red.al = { iniciar, estado, evento, danio, desconectado, lobby }
+// Todo evento lleva { n: nivel, de: puesto de quien lo envía }.
+// main.js se conecta con W.Red.al = { iniciar, estado, evento, danio, desconectado, lobby, yo, salio }
 // =====================================================
 (function () {
   'use strict';
@@ -23,6 +27,8 @@
     personaje: 'chispa',
     jugadores: [],        // [{ puesto, personaje }]
     nivelElegido: 1,
+    modo: 'coop',         // 'coop' | 'carrera' | 'combate'
+    repartidas: true,     // cooperativo: cada pista la puede leer un solo jugador
     enJuego: false,
     estado: '',           // texto para la sala de espera
     error: '',
@@ -103,6 +109,8 @@
     if (puesto === undefined) return;
     if (m.t === 'yo') { if (R.al.yo) R.al.yo(puesto, m); return; }
     if (m.t === 'evento') {
+      if (!m.e) return;
+      m.e.de = puesto;                             // el anfitrión confirma quién lo envió
       tr.difundir({ t: 'evento', e: m.e }, id);    // reenvía a los demás clientes
       if (R.al.evento) R.al.evento(m.e, puesto);
     }
@@ -119,24 +127,39 @@
   }
 
   function difundirLobby() {
-    if (tr && R.rol === 'anfitrion') tr.difundir({ t: 'lobby', jugadores: R.jugadores, nivel: R.nivelElegido });
+    if (tr && R.rol === 'anfitrion') tr.difundir({ t: 'lobby', jugadores: R.jugadores, nivel: R.nivelElegido, modo: R.modo, repartidas: R.repartidas });
     if (R.al.lobby) R.al.lobby();
   }
   R.cambiarNivel = function (d) {
     R.nivelElegido = Math.max(1, Math.min(12, R.nivelElegido + d));
     difundirLobby();
   };
+  R.cambiarModo = function (d) {
+    const L = CR.MODOS, i = L.indexOf(R.modo);
+    R.modo = L[(i + d + L.length) % L.length];
+    difundirLobby();
+  };
+  R.alternarRepartidas = function () { R.repartidas = !R.repartidas; difundirLobby(); };
+  R.esVersus = function () { return R.modo === 'carrera' || R.modo === 'combate'; };
+  // ¿Se puede iniciar? El versus necesita al menos un rival
+  R.puedeIniciar = function () { return R.activo && (!R.esVersus() || R.jugadores.length > 1); };
 
   // El anfitrión comienza la partida
   R.iniciar = function () {
-    if (R.rol !== 'anfitrion' || !R.activo) return;
+    if (R.rol !== 'anfitrion' || !R.puedeIniciar()) return;
     R.enJuego = true;
     const semilla = (Math.random() * 1e9) | 0;
-    tr.difundir({ t: 'iniciar', nivel: R.nivelElegido, semilla: semilla, jugadores: R.jugadores });
+    tr.difundir({ t: 'iniciar', nivel: R.nivelElegido, semilla: semilla, jugadores: R.jugadores, modo: R.modo, repartidas: R.repartidas });
     if (R.al.iniciar) R.al.iniciar(R.nivelElegido, semilla);
   };
 
-  // Daño a un cliente concreto (lo calcula el anfitrión)
+  // Termina la partida en curso y vuelve a la sala de espera (la conexión sigue abierta)
+  R.volverASala = function () {
+    R.enJuego = false;
+    if (R.rol === 'anfitrion') difundirLobby();
+  };
+
+  // Daño a un cliente concreto (lo calcula el anfitrión: enemigos del cooperativo)
   R.danioA = function (puesto, d) {
     if (R.rol !== 'anfitrion') return;
     for (const id in clientes) if (clientes[id] === puesto) tr.enviar(id, { t: 'danio', d: d });
@@ -176,29 +199,37 @@
     ultimoAnfitrion = performance.now();
     switch (m.t) {
       case 'bienvenido': R.puesto = m.puesto; break;
-      case 'lobby': R.jugadores = m.jugadores; R.nivelElegido = m.nivel; if (R.al.lobby) R.al.lobby(); break;
+      case 'lobby':
+        R.jugadores = m.jugadores; R.nivelElegido = m.nivel;
+        if (m.modo) R.modo = m.modo;
+        if (m.repartidas !== undefined) R.repartidas = m.repartidas;
+        if (R.al.lobby) R.al.lobby();
+        break;
       case 'rechazo': R.salir(); R.error = m.motivo; break;
       case 'iniciar':
         R.enJuego = true; R.jugadores = m.jugadores;
+        R.modo = m.modo || 'coop';
+        R.repartidas = m.repartidas !== false;
         if (R.al.iniciar) R.al.iniciar(m.nivel, m.semilla);
         break;
       case 'estado': if (R.al.estado) R.al.estado(m); break;
-      case 'evento': if (R.al.evento) R.al.evento(m.e); break;
+      case 'evento': if (R.al.evento) R.al.evento(m.e, m.e ? m.e.de : undefined); break;
       case 'danio': if (R.al.danio) R.al.danio(m.d); break;
     }
   }
 
   // ===================== COMÚN =====================
-  // Un cambio hecho por el jugador local (puerta, aturdir, sellar...)
+  // Un cambio hecho por el jugador local (puerta, aturdir, golpe a un rival...)
   R.evento = function (e) {
     if (!tr || !R.activo) return;
+    e.de = R.puesto;
     if (R.rol === 'anfitrion') tr.difundir({ t: 'evento', e: e });
     else tr.enviar({ t: 'evento', e: e });
   };
 
   // Llamar en cada cuadro durante la partida.
   //   armarEstado(): (anfitrión) mensaje 'estado' con todo
-  //   miPosicion():  (cliente) { x, y, a, pe, v, vm, e }
+  //   miPosicion():  (cliente) { x, y, a, pe, v, vm, e, f }
   R.actualizar = function (dt, armarEstado, miPosicion) {
     if (!R.activo || !R.enJuego || !tr) return;
     // Detección de silencio (conexiones que se cortan sin avisar)
@@ -226,6 +257,11 @@
   window.addEventListener('beforeunload', function () { R.salir(); });
 
   R.esAnfitrion = function () { return R.rol === 'anfitrion'; };
+  // Nombre del personaje de un puesto (para mensajes)
+  R.nombreDe = function (puesto) {
+    const j = R.jugadores.find(function (q) { return q.puesto === puesto; });
+    return j && W.PERSONAJES[j.personaje] ? W.PERSONAJES[j.personaje].nombre : 'JUGADOR ' + (puesto + 1);
+  };
   R.textoError = textoError;
   W.Red = R;
 })();

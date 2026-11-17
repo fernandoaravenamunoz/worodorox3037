@@ -1,5 +1,7 @@
 // =====================================================
 // Pantallas del multijugador: teclado para el código y sala de espera
+// En la sala, el anfitrión elige el modo (cooperativo, carrera o combate),
+// el nivel (o el mapa de la arena) y si las pistas se reparten entre los jugadores.
 // =====================================================
 (function () {
   'use strict';
@@ -62,18 +64,24 @@
 
   // ---------- Sala de espera ----------
   const Sala = {
-    iniciar: { x: A / 2 - 45, y: 150, w: 90, h: 16 },
+    iniciar: { x: A / 2 - 45, y: 154, w: 90, h: 13 },
     salir: { x: 6, y: 4, w: 40, h: 12 },
-    menos: { x: 214, y: 128, w: 14, h: 13 },
-    mas: { x: 292, y: 128, w: 14, h: 13 },
+    modoMenos: { x: 10, y: 126, w: 13, h: 13 },
+    modoMas: { x: 125, y: 126, w: 13, h: 13 },
+    repartir: { x: 10, y: 142, w: 128, h: 9 },
+    menos: { x: 214, y: 126, w: 14, h: 13 },
+    mas: { x: 292, y: 126, w: 14, h: 13 },
     // Devuelve 'iniciar', 'salir' o null
     clic: function (x, y) {
       const p = { x: x, y: y }, R = W.Red;
       if (U().dentro(p, Sala.salir)) return 'salir';
       if (R.esAnfitrion()) {
-        if (U().dentro(p, Sala.menos)) { R.cambiarNivel(-1); return null; }
-        if (U().dentro(p, Sala.mas)) { R.cambiarNivel(1); return null; }
-        if (U().dentro(p, Sala.iniciar) && R.activo) return 'iniciar';
+        if (U().dentro(p, Sala.modoMenos)) { R.cambiarModo(-1); sonido(); return null; }
+        if (U().dentro(p, Sala.modoMas)) { R.cambiarModo(1); sonido(); return null; }
+        if (R.modo === 'coop' && U().dentro(p, Sala.repartir)) { R.alternarRepartidas(); sonido(); return null; }
+        if (U().dentro(p, Sala.menos)) { R.cambiarNivel(-1); sonido(); return null; }
+        if (U().dentro(p, Sala.mas)) { R.cambiarNivel(1); sonido(); return null; }
+        if (U().dentro(p, Sala.iniciar) && R.puedeIniciar()) return 'iniciar';
       }
       return null;
     },
@@ -83,15 +91,18 @@
       if (R.esAnfitrion()) {
         if (k === 'ArrowLeft') R.cambiarNivel(-1);
         if (k === 'ArrowRight') R.cambiarNivel(1);
-        if (k === 'Enter' && R.activo) return 'iniciar';
+        if (k === 'ArrowUp') R.cambiarModo(-1);
+        if (k === 'ArrowDown') R.cambiarModo(1);
+        if (k === 'KeyR' && R.modo === 'coop') R.alternarRepartidas();
+        if (k === 'Enter' && R.puedeIniciar()) return 'iniciar';
       }
       return null;
     },
     dibujar: function (ctx, t) {
-      const R = W.Red;
+      const R = W.Red, CR = W.configRed;
       ctx.fillStyle = PAL.fondo; ctx.fillRect(0, 0, A, H);
       U().boton(ctx, Sala.salir, 'SALIR', PAL.gris);
-      T(ctx, 'SALA DE ESPERA - COOPERATIVO', A / 2, 8, PAL.magenta, 1, 'centro');
+      T(ctx, 'SALA DE ESPERA - ' + CR.NOMBRE_MODO[R.modo], A / 2, 8, R.modo === 'coop' ? PAL.cian : PAL.magenta, 1, 'centro');
       if (R.esAnfitrion()) {
         if (R.activo) {
           T(ctx, 'CODIGO DE LA PARTIDA', A / 2, 22, PAL.gris, 1, 'centro');
@@ -103,38 +114,54 @@
         T(ctx, 'PARTIDA ' + R.codigo, A / 2, 26, PAL.cianClaro, 2, 'centro');
       }
       // Jugadores
-      for (let i = 0; i < W.configRed.MAX_JUGADORES; i++) {
-        const r = { x: 14 + i * 74, y: 64, w: 68, h: 56 };
+      for (let i = 0; i < CR.MAX_JUGADORES; i++) {
+        const r = { x: 14 + i * 74, y: 64, w: 68, h: 52 };
         const j = R.jugadores.find(function (q) { return q.puesto === i; });
         U().boton(ctx, r, '', j ? COL[i] : '#1d1b2e', '#0b0a18');
         if (j) {
           const p = W.PERSONAJES[j.personaje];
-          W.Personajes.dibujarCuerpo(ctx, j.personaje, r.x + 26, r.y + 6, 1, t * 6 + i, 2, false);
-          T(ctx, p.nombre, r.x + r.w / 2, r.y + 38, PAL.blanco, 1, 'centro');
-          T(ctx, i === 0 ? 'ANFITRION' : (j.puesto === R.puesto ? 'TU' : 'JUGADOR ' + (i + 1)), r.x + r.w / 2, r.y + 47, COL[i], 1, 'centro');
+          W.Personajes.dibujarCuerpo(ctx, j.personaje, r.x + 26, r.y + 5, 1, t * 6 + i, 2, false);
+          T(ctx, p.nombre, r.x + r.w / 2, r.y + 35, PAL.blanco, 1, 'centro');
+          T(ctx, i === 0 ? 'ANFITRION' : (j.puesto === R.puesto ? 'TU' : 'JUGADOR ' + (i + 1)), r.x + r.w / 2, r.y + 44, COL[i], 1, 'centro');
         } else {
-          T(ctx, Math.floor(t * 2) % 2 ? 'LIBRE' : '...', r.x + r.w / 2, r.y + 25, PAL.grisOsc, 1, 'centro');
+          T(ctx, Math.floor(t * 2) % 2 ? 'LIBRE' : '...', r.x + r.w / 2, r.y + 23, PAL.grisOsc, 1, 'centro');
         }
       }
-      // Nivel inicial
-      T(ctx, 'NIVEL INICIAL', 160, 131, PAL.gris, 1, 'centro');
+      // Modo de juego
+      T(ctx, CR.DESCRIPCION_MODO[R.modo], 104, 119, PAL.gris, 1, 'centro');
+      if (R.esAnfitrion()) {
+        U().boton(ctx, Sala.modoMenos, '<', PAL.magenta);
+        U().boton(ctx, Sala.modoMas, '>', PAL.magenta);
+      }
+      T(ctx, CR.NOMBRE_MODO[R.modo], 74, 130, R.modo === 'coop' ? PAL.cianClaro : PAL.magentaClaro, 1, 'centro');
+      if (R.modo === 'coop') {
+        const txt = 'PISTAS REPARTIDAS: ' + (R.repartidas ? 'SI' : 'NO');
+        if (R.esAnfitrion()) U().boton(ctx, Sala.repartir, txt, R.repartidas ? PAL.cian : PAL.gris);
+        else T(ctx, txt, 74, 145, R.repartidas ? PAL.cian : PAL.gris, 1, 'centro');
+      } else {
+        T(ctx, R.modo === 'carrera' ? '1 EMP 2 HACKEO 3 MINA 4 DRON R ESCUDO' : '1 EMP 2 MINA R ESCUDO', 74, 145, PAL.grisOsc, 1, 'centro');
+      }
+      // Nivel inicial / mapa de la arena
+      T(ctx, R.modo === 'combate' ? 'ARENA' : R.modo === 'carrera' ? 'NIVEL' : 'NIVEL INICIAL', 260, 119, PAL.gris, 1, 'centro');
       if (R.esAnfitrion()) {
         U().boton(ctx, Sala.menos, '<', PAL.cian);
         U().boton(ctx, Sala.mas, '>', PAL.cian);
       }
-      T(ctx, String(R.nivelElegido), 260, 129, PAL.cianClaro, 2, 'centro');
-      T(ctx, (W.niveles[R.nivelElegido] || {}).nombre || '', 260, 142, PAL.grisOsc, 1, 'centro');
+      T(ctx, String(R.nivelElegido), 260, 127, PAL.cianClaro, 2, 'centro');
+      T(ctx, (W.niveles[R.nivelElegido] || {}).nombre || '', 260, 140, PAL.grisOsc, 1, 'centro');
       // Botón / estado
       if (R.esAnfitrion()) {
-        U().boton(ctx, Sala.iniciar, R.jugadores.length > 1 ? 'INICIAR' : 'INICIAR SOLO', R.activo ? PAL.verde : PAL.grisOsc, '#0b1a12');
+        const etiqueta = R.esVersus() && R.jugadores.length < 2 ? 'FALTAN RIVALES' : R.jugadores.length > 1 ? 'INICIAR' : 'INICIAR SOLO';
+        U().boton(ctx, Sala.iniciar, etiqueta, R.puedeIniciar() ? PAL.verde : PAL.grisOsc, '#0b1a12');
       } else {
-        T(ctx, 'EL ANFITRION ELIGE EL NIVEL E INICIA', A / 2, 155, PAL.gris, 1, 'centro');
+        T(ctx, 'EL ANFITRION ELIGE Y COMIENZA', A / 2, 156, PAL.gris, 1, 'centro');
       }
-      if (R.error) T(ctx, R.error, A / 2, 170, PAL.rojo, 1, 'centro');
-      else if (R.estado && !R.activo) T(ctx, R.estado, A / 2, 170, PAL.amarillo, 1, 'centro');
-      else if (W.configRed.transporte === 'local') T(ctx, 'MODO DE PRUEBA LOCAL (MISMO COMPUTADOR)', A / 2, 170, PAL.amarillo, 1, 'centro');
+      if (R.error) T(ctx, R.error, A / 2, 171, PAL.rojo, 1, 'centro');
+      else if (R.estado && !R.activo) T(ctx, R.estado, A / 2, 171, PAL.amarillo, 1, 'centro');
+      else if (CR.transporte === 'local') T(ctx, 'MODO DE PRUEBA LOCAL (MISMO COMPUTADOR)', A / 2, 171, PAL.amarillo, 1, 'centro');
     }
   };
+  function sonido() { if (W.Audio) W.Audio.sfx('clic'); }
 
   W.MenuRed = { Codigo: Codigo, Sala: Sala };
 })();

@@ -6,10 +6,13 @@
 // Comprueba:
 //  - leyenda completa (cada puerta y holograma definidos, cada pista existe)
 //  - pistas compuestas ({ partes: 2 }): cada parte tiene su holograma y el tipo se puede dividir
+//  - puertas de doble palanca ({ palancas: true }): cada una tiene al menos 2 palancas P
+//    (cada P se une a la puerta de doble palanca más cercana, igual que en el juego)
 //  - que el nivel se pueda terminar: simula el avance abriendo puertas solo
-//    cuando su pista ya se vio COMPLETA (todas sus partes) y su objeto ya se obtuvo en la sala 2D
+//    cuando su pista ya se vio COMPLETA (todas sus partes), su objeto ya se obtuvo en la sala 2D
+//    y, si es de doble palanca, cuando se llega a todas sus palancas
 //  - que cada pista se use LEJOS de donde aparece (y que las partes estén lejos entre sí)
-//  - cantidades sugeridas: 3-5 puertas con puzzle, 1 sala 2D, 1-2 enemigos, 1-2 estaciones
+//  - cantidades sugeridas: 3-5 puertas con puzzle o palancas, 1 sala 2D, 1-2 enemigos, 1-2 estaciones
 //  - la sala 2D: inicio, salida, objeto, terminal y alcanzabilidad aproximada
 // =====================================================
 'use strict';
@@ -25,7 +28,7 @@ for (let n = 1; n <= 12; n++) {
   if (fs.existsSync(f)) eval(fs.readFileSync(f, 'utf8'));
 }
 
-const PARED = '#NTCYSXB';
+const PARED = '#NTCYSXBP';
 const ENT = 'dDpuelkg<>^vQOAh@';
 const HOLO = 'abcfijmn';
 const DIVISIBLES = ['codigo', 'simon'];
@@ -47,11 +50,12 @@ function validarNivel(def) {
   for (let x = 0; x < ancho; x++) { if (!PARED.includes(ch(x, 0)) || !PARED.includes(ch(x, alto - 1))) error(n, 'borde abierto en columna ' + x); }
   for (let y = 0; y < alto; y++) { if (!PARED.includes(ch(0, y)) || !PARED.includes(ch(ancho - 1, y))) error(n, 'borde abierto en fila ' + y); }
 
-  const puertas = [], hologramas = [], cuenta = { Y: 0, S: 0, X: 0, B: 0, enemigos: 0, inicio: null };
+  const puertas = [], hologramas = [], palancas = [], cuenta = { Y: 0, S: 0, X: 0, B: 0, enemigos: 0, inicio: null };
   for (let y = 0; y < alto; y++) for (let x = 0; x < ancho; x++) {
     const c = ch(x, y);
     if (c >= '1' && c <= '9') { if (!ley[c]) error(n, 'puerta ' + c + ' sin leyenda'); puertas.push({ c, x, y, d: ley[c] || {} }); }
     else if (HOLO.includes(c)) { if (!ley[c] || !ley[c].pista) error(n, 'holograma ' + c + ' sin pista en la leyenda'); hologramas.push({ c, x, y, d: ley[c] || {} }); }
+    else if (c === 'P') palancas.push({ x, y });
     else if (c === '@') cuenta.inicio = { x, y };
     else if ('dDpu'.includes(c)) cuenta.enemigos++;
     else if (cuenta[c] !== undefined) cuenta[c]++;
@@ -61,6 +65,25 @@ function validarNivel(def) {
   puertas.forEach(p => { if (p.d.pista && !pistas[p.d.pista]) error(n, 'la puerta ' + p.c + ' usa la pista inexistente ' + p.d.pista); });
   hologramas.forEach(h => { if (h.d.pista && !pistas[h.d.pista]) error(n, 'el holograma ' + h.c + ' usa la pista inexistente ' + h.d.pista); });
   if (def.baldosas && !pistas[def.baldosas.pista]) error(n, 'baldosas sin pista válida');
+
+  // Puertas de doble palanca: cada P se une a la más cercana
+  const dePalanca = puertas.filter(p => p.d.palancas);
+  if (palancas.length && !dePalanca.length) error(n, 'hay palancas P pero ninguna puerta tiene { palancas: true }');
+  palancas.forEach(pa => {
+    let mejor = null, mejorD = 1e9;
+    dePalanca.forEach(p => { const d = Math.abs(p.x - pa.x) + Math.abs(p.y - pa.y); if (d < mejorD) { mejor = p; mejorD = d; } });
+    pa.puerta = mejor;
+    const libres = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dy]) => { const c = ch(pa.x + dx, pa.y + dy); return c === '.' || ENT.includes(c); });
+    if (!libres.length) error(n, 'la palanca en (' + pa.x + ',' + pa.y + ') no tiene una casilla libre al lado');
+  });
+  dePalanca.forEach(p => {
+    const suyas = palancas.filter(pa => pa.puerta === p);
+    if (suyas.length < 2) error(n, 'la puerta de doble palanca ' + p.c + ' tiene ' + suyas.length + ' palanca(s); necesita al menos 2');
+    for (let i = 0; i < suyas.length; i++) for (let j = i + 1; j < suyas.length; j++) {
+      if (Math.abs(suyas[i].x - suyas[j].x) + Math.abs(suyas[i].y - suyas[j].y) < 4) aviso(n, 'las palancas de la puerta ' + p.c + ' están muy juntas (una sola persona las tira a la vez)');
+    }
+    if (p.d.puzzle || p.d.pista || p.d.objeto) aviso(n, 'la puerta ' + p.c + ' es de doble palanca: se ignoran su puzzle, pista u objeto');
+  });
 
   // Pistas compuestas: cada parte con su holograma
   const partesDe = k => (pistas[k] && pistas[k].partes) || 1;
@@ -80,8 +103,9 @@ function validarNivel(def) {
     if (!holos.length) aviso(n, 'la pista ' + k + ' no aparece en ningún holograma');
   }
 
-  const conPuzzle = puertas.filter(p => p.d.puzzle).length;
-  if (conPuzzle < 3 || conPuzzle > 5) aviso(n, conPuzzle + ' puertas con puzzle (se sugieren 3 a 5)');
+  // Las puertas de doble palanca cuentan como desafío (en cooperativo exigen coordinarse)
+  const conPuzzle = puertas.filter(p => p.d.puzzle || p.d.palancas).length;
+  if (conPuzzle < 3 || conPuzzle > 5) aviso(n, conPuzzle + ' puertas con puzzle o palancas (se sugieren 3 a 5)');
   if (cuenta.Y !== 1) aviso(n, cuenta.Y + ' ductos 2D (se sugiere 1)');
   if (cuenta.S < 1 || cuenta.S > 2) aviso(n, cuenta.S + ' estaciones (se sugieren 1 o 2)');
   if (cuenta.enemigos < 1 || cuenta.enemigos > 3) aviso(n, cuenta.enemigos + ' enemigos (se sugieren 1 o 2)');
@@ -153,6 +177,13 @@ function validarNivel(def) {
     }
     puertas.forEach(p => {
       if (abiertas.has(p.c) || !junto(p.x, p.y)) return;
+      if (p.d.palancas) {
+        const suyas = palancas.filter(pa => pa.puerta === p);
+        if (suyas.length < 2 || !suyas.every(pa => junto(pa.x, pa.y))) return;
+        abiertas.add(p.c); cambio = true;
+        orden.push('abre puerta ' + p.c + ' (doble palanca)');
+        return;
+      }
       if (p.d.pista && !vista(p.d.pista)) return;
       if (p.d.objeto && !objetos.has(p.d.objeto)) return;
       abiertas.add(p.c); cambio = true;
@@ -246,8 +277,8 @@ function validarSala(n, def) {
 
 // ---------- Variedad: avisa si dos niveles usan el mismo plano ----------
 function plano(def) {
-  // Solo la geometría: paredes (#, N, T y decoración) frente a todo lo demás
-  return def.mapa.map(f => f.replace(/[^#NTC]/g, '.').replace(/[NTC]/g, '#')).join('\n');
+  // Solo la geometría: paredes (#, N, T, P y decoración) frente a todo lo demás
+  return def.mapa.map(f => f.replace(/[^#NTCP]/g, '.').replace(/[NTCP]/g, '#')).join('\n');
 }
 function validarVariedad(lista) {
   for (let i = 0; i < lista.length; i++) for (let j = i + 1; j < lista.length; j++) {

@@ -2,6 +2,7 @@
 // NIVEL 5 - FUNDICION (Zona 2: Industrial)
 // Plano: anillo doble de fundicion con pasillo central
 // Leyenda de los mapas: ver nivel01.js. Validar con: node scripts/validar-niveles.js
+// La puerta 4 es de doble palanca: sus palancas P estan en la sala del este.
 // =====================================================
 W.niveles = W.niveles || {};
 
@@ -13,11 +14,11 @@ W.niveles[5] = {
   mapa: [
     '########################',
     '#h..#...########...#...#',
-    '#...#.......#....p.#...#',
+    '#...#.......#....p.#...P',
     '#.p........##......3...#',
     'S...#...CC#####C...#...S',
     '#####.gg###.####...#...#',
-    '#...#...###.####...#...#',
+    '#...#...###.####...P...#',
     '#...#...c#a.###b...##4##',
     '#...#...###.####...#...#',
     '#...#...###.####...#...#',
@@ -35,7 +36,7 @@ W.niveles[5] = {
     '1': { puzzle: 'deslizante', dificultad: 2 },
     '2': { puzzle: 'codigo', dificultad: 2, pista: 'p1', riesgo: true },
     '3': { puzzle: 'simon', dificultad: 2, pista: 'p2' },
-    '4': { puzzle: 'luces', dificultad: 2 },
+    '4': { palancas: true },                 // puerta de doble palanca
     '5': { objeto: 'VALVULA' }
   },
   pistas: {

@@ -3,7 +3,7 @@
 //  celdas     : código de cada casilla (ver W.CELDA en config.js)
 //  meta       : datos extra por casilla (puertas, hologramas) tomados de la leyenda del nivel
 //  entidades  : lo que va sobre el piso (enemigos, trampas, botiquines) para que el nivel lo cree
-//  texCelda   : textura propia de una pared (hologramas, estación activa, núcleo)
+//  texCelda   : textura propia de una pared (hologramas, estación activa, núcleo, palancas)
 //  texSuelo   : textura propia del piso (trampas)
 //  visto      : casillas que el jugador ya vio (mapa automático)
 //  bloqueo    : casillas ocupadas por algo sólido que no es pared (guardianes)
@@ -40,7 +40,9 @@
         } else if (ch >= '1' && ch <= '9') {
           // Puerta definida en la leyenda
           const d = leyenda[ch] || {};
-          codigo = d.objeto && !d.puzzle ? CEL.PUERTA_TARJETA : d.riesgo ? CEL.PUERTA_MAGENTA : CEL.PUERTA;
+          codigo = d.palancas ? CEL.PUERTA_PALANCA
+            : d.objeto && !d.puzzle ? CEL.PUERTA_TARJETA
+            : d.riesgo ? CEL.PUERTA_MAGENTA : CEL.PUERTA;
           this.meta[i] = { car: ch, def: d };
         } else if (W.HOLOGRAMAS.indexOf(ch) >= 0) {
           // Holograma con pista

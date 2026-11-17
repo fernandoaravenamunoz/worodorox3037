@@ -35,6 +35,7 @@
   };
   Menu.prototype.dibujar = function (ctx) {
     const r = this.rects();
+    if (this.sel >= r.length) this.sel = 0;
     for (let i = 0; i < r.length; i++) {
       const sel = i === this.sel;
       U().boton(ctx, r[i], typeof r[i].o.texto === 'function' ? r[i].o.texto() : r[i].o.texto, sel ? PAL.cianClaro : PAL.cian, sel ? '#123540' : '#0b0a18');
@@ -52,7 +53,7 @@
     T(ctx, '3073', A / 2, 44, PAL.magenta, 3, 'centro');
     T(ctx, 'ESCAPA DE LA NAVE CRIADERO', A / 2, 66, '#8d93ad', 1, 'centro');
     menu.dibujar(ctx);
-    T(ctx, 'VERSION 0.9 - UN JUGADOR - M: SONIDO', A / 2, 170, '#4a4f63', 1, 'centro');
+    T(ctx, 'VERSION 1.0 - UN JUGADOR, COOPERATIVO Y VERSUS - M: SONIDO', A / 2, 171, '#4a4f63', 1, 'centro');
   }
 
   const HISTORIA = [
