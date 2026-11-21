@@ -44,7 +44,39 @@
       };
       if (this.modo === 'combate') this.prepararCombate();
     }
+    if (this.modo !== 'combate') this.separarInicio();
     this.repartirPistas(this.jugadoresRed.map(function (j) { return j.puesto; }));
+  };
+
+  // v2.2: al empezar un nivel cada jugador aparece en una casilla distinta junto al
+  // inicio (antes todos aparecían uno dentro del otro y no se veían hasta separarse).
+  P.separarInicio = function () {
+    const jug = this.jug, ini = this.inicio;
+    if (Math.hypot(jug.x - ini.x, jug.y - ini.y) > 0.01) return;      // viene de un punto de control
+    const puestos = this.jugadoresRed.map(function (j) { return j.puesto; }).sort(function (a, b) { return a - b; });
+    const orden = puestos.indexOf(this.miPuesto);
+    if (orden <= 0) return;
+    const mapa = this.mapa, an = mapa.ancho, self = this;
+    const libre = function (i) { return mapa.celdas[i] === 0 && !mapa.bloqueo[i] && !(self.esTrampa && self.esTrampa[i]); };
+    const i0 = mapa.indice(Math.floor(ini.x), Math.floor(ini.y));
+    const visto = new Uint8Array(mapa.celdas.length);
+    const cola = [i0], lista = [];
+    visto[i0] = 1;
+    while (cola.length && lista.length <= orden) {
+      const i = cola.shift();
+      if (i !== i0) lista.push(i);
+      const x = i % an, y = Math.floor(i / an);
+      [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (d) {
+        const nx = x + d[0], ny = y + d[1];
+        if (nx < 0 || ny < 0 || nx >= an || ny >= mapa.alto) return;
+        const j = ny * an + nx;
+        if (visto[j] || !libre(j)) return;
+        visto[j] = 1; cola.push(j);
+      });
+    }
+    const c = lista[orden - 1];
+    if (c === undefined) return;
+    jug.x = c % an + 0.5; jug.y = Math.floor(c / an) + 0.5;
   };
 
   P.nombrePuesto = function (puesto) {

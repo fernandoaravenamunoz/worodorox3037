@@ -265,7 +265,27 @@
     return mejor;
   }
 
+  // Proyecta un punto del mapa a la pantalla con la cámara del jugador (para etiquetas).
+  // Devuelve { x, y (pie), alto, prof, tapado } o null si queda detrás de la cámara.
+  function proyectar(jug, x, y, escala) {
+    const dirX = Math.cos(jug.ang), dirY = Math.sin(jug.ang);
+    const plX = -dirY * PLANO, plY = dirX * PLANO;
+    const invDet = 1 / (plX * dirY - dirX * plY);
+    const ssx = x - jug.x, ssy = y - jug.y;
+    const tX = invDet * (dirY * ssx - dirX * ssy);
+    const tY = invDet * (-plY * ssx + plX * ssy);
+    if (tY <= 0.05) return null;
+    const hor = Math.round(VH / 2 + jug.pitch * ESC_PITCH);
+    const sx = (A / 2) * (1 + tX / tY);
+    const col = Math.max(0, Math.min(A - 1, Math.round(sx)));
+    return {
+      x: sx, y: hor + jug.camZ * P / tY, alto: (escala || 0.8) * P / tY, prof: tY,
+      tapado: tY >= zbuf[col]
+    };
+  }
+
   W.raycaster = {
+    proyectar: proyectar,
     calidad: 'alta',          // 'alta' | 'media' (main.js la baja sola si faltan cuadros)
     iniciar: iniciar,
     preparar: preparar,

@@ -50,9 +50,23 @@
   };
 
   // Movimiento con colisión (círculo contra la cuadrícula)
-  function moverCon(e, mx, my, mapa, r) {
-    if (!mapa.solida(e.x + mx + Math.sign(mx) * r, e.y)) e.x += mx;
-    if (!mapa.solida(e.x, e.y + my + Math.sign(my) * r)) e.y += my;
+  // Movimiento con colisión: paredes y jugadores (los cuerpos son sólidos)
+  const RADIO_JUG = 0.22;
+  function chocaJugador(e, x, y, objs) {
+    if (!objs) return false;
+    const R = (W.Nivel && W.Nivel.RADIO_CUERPO[e.tipo]) || 0.3;
+    for (const o of objs) {
+      const lim = R + RADIO_JUG;
+      const dx = x - o.x, dy = y - o.y, d2 = dx * dx + dy * dy;
+      if (d2 >= lim * lim) continue;
+      const ax = e.x - o.x, ay = e.y - o.y;
+      if (d2 < ax * ax + ay * ay) return true;   // solo bloquea si se acerca
+    }
+    return false;
+  }
+  function moverCon(e, mx, my, mapa, r, objs) {
+    if (!mapa.solida(e.x + mx + Math.sign(mx) * r, e.y) && !chocaJugador(e, e.x + mx, e.y, objs)) e.x += mx;
+    if (!mapa.solida(e.x, e.y + my + Math.sign(my) * r) && !chocaJugador(e, e.x, e.y + my, objs)) e.y += my;
   }
 
   // nivel.objetivos() entrega los jugadores que pueden ser atacados:
@@ -82,7 +96,8 @@
     if (this.tipo === 'dron') {
       // Patrulla: avanza hasta topar una pared y se devuelve
       const nx = this.x + this.dx * this.vel * dt, ny = this.y + this.dy * this.vel * dt;
-      if (mapa.solida(nx + this.dx * 0.45, ny + this.dy * 0.45)) { this.dx = -this.dx; this.dy = -this.dy; }
+      // Patrulla: se devuelve al topar una pared o a un jugador (no lo atraviesa)
+      if (mapa.solida(nx + this.dx * 0.45, ny + this.dy * 0.45) || chocaJugador(this, nx, ny, nivel.cuerposJugadores())) { this.dx = -this.dx; this.dy = -this.dy; }
       else { this.x = nx; this.y = ny; }
       this.ang = Math.atan2(this.dy, this.dx);
       // Detección: algún jugador dentro del cono y con línea de visión
@@ -117,7 +132,7 @@
         const dx = tx - this.x, dy = ty - this.y, d = Math.hypot(dx, dy);
         if (d > 0.05) {
           const v = (this.visto > 0 ? this.vel : this.vel * 0.6) * dt;
-          moverCon(this, dx / d * v, dy / d * v, mapa, 0.28);
+          moverCon(this, dx / d * v, dy / d * v, mapa, 0.28, nivel.cuerposJugadores());
           this.ang = Math.atan2(dy, dx);
         }
       }

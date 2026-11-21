@@ -31,19 +31,36 @@
     this.aturdido = 0;            // versus: segundos aturdido por un pulso EMP (no se mueve ni actúa)
   }
 
-  // Intenta mover con colisión por ejes separados (permite deslizarse por paredes)
-  Jugador.prototype.mover = function (mx, my, mapa) {
+  // ¿Chocaría en (x, y) con algún cuerpo sólido (enemigos u otros jugadores)?
+  // Solo bloquea si el movimiento ACERCA al cuerpo: así nunca se queda pegado
+  // si dos cuerpos ya están encimados (al reaparecer, por ejemplo).
+  function choca(x, y, x0, y0, cuerpos) {
+    if (!cuerpos) return false;
+    const r = C.RADIO_JUGADOR;
+    for (const c of cuerpos) {
+      const lim = r + c.r;
+      const dx = x - c.x, dy = y - c.y, d2 = dx * dx + dy * dy;
+      if (d2 >= lim * lim) continue;
+      const ax = x0 - c.x, ay = y0 - c.y;
+      if (d2 < ax * ax + ay * ay) return true;
+    }
+    return false;
+  }
+
+  // Intenta mover con colisión por ejes separados (permite deslizarse por paredes y cuerpos)
+  // cuerpos: [{ x, y, r }] enemigos y jugadores sólidos (opcional)
+  Jugador.prototype.mover = function (mx, my, mapa, cuerpos) {
     const r = C.RADIO_JUGADOR;
     const nx = this.x + mx;
     const bx = nx + Math.sign(mx) * r;
-    if (mx !== 0 && !mapa.solida(bx, this.y - r) && !mapa.solida(bx, this.y + r)) this.x = nx;
+    if (mx !== 0 && !mapa.solida(bx, this.y - r) && !mapa.solida(bx, this.y + r) && !choca(nx, this.y, this.x, this.y, cuerpos)) this.x = nx;
     const ny = this.y + my;
     const by = ny + Math.sign(my) * r;
-    if (my !== 0 && !mapa.solida(this.x - r, by) && !mapa.solida(this.x + r, by)) this.y = ny;
+    if (my !== 0 && !mapa.solida(this.x - r, by) && !mapa.solida(this.x + r, by) && !choca(this.x, ny, this.x, this.y, cuerpos)) this.y = ny;
   };
 
-  // entrada: { avance, lateral, giro, pitch, correr }
-  Jugador.prototype.actualizar = function (dt, entrada, mapa) {
+  // entrada: { avance, lateral, giro, pitch, correr }   cuerpos: sólidos cercanos (opcional)
+  Jugador.prototype.actualizar = function (dt, entrada, mapa, cuerpos) {
     // Mirada
     this.ang += entrada.giro;
     this.pitch = Math.max(-C.PITCH_MAX, Math.min(C.PITCH_MAX, this.pitch + entrada.pitch));
@@ -66,7 +83,7 @@
     const decae = Math.max(0, 1 - dt * 6);
     this.golpeX *= decae; this.golpeY *= decae;
 
-    this.mover(mx, my, mapa);
+    this.mover(mx, my, mapa, cuerpos);
 
     // Balanceo de cabeza al caminar
     const intensidad = Math.min(1, Math.hypot(f, s));

@@ -137,7 +137,7 @@
     const jug = this.jug, mapa = this.mapa;
     // Atrapado (cooperativo) o derribado (combate): no se puede mover
     if (jug.atrapado || this.caidoVs()) entrada = { avance: 0, lateral: 0, giro: entrada.giro, pitch: entrada.pitch, correr: false };
-    jug.actualizar(dt, entrada, mapa);
+    jug.actualizar(dt, entrada, mapa, this.cuerpos());
 
     // Última posición segura
     const ic = mapa.indice(Math.floor(jug.x), Math.floor(jug.y));
@@ -154,6 +154,23 @@
         if (W.Audio) W.Audio.sfx('objeto');
       }
     }
+  };
+
+  // Cuerpos sólidos para el jugador local: enemigos (no sellados) y los demás jugadores.
+  // Radios en casillas. Los jugadores caídos o tendidos también ocupan su lugar.
+  Nivel.RADIO_CUERPO = { dron: 0.26, perseguidor: 0.3, guardian: 0.36, jugador: 0.22 };
+  Nivel.prototype.cuerpos = function () {
+    const l = [], R = Nivel.RADIO_CUERPO;
+    for (const e of this.enemigos) if (e.estado !== 'sellado') l.push({ x: e.x, y: e.y, r: R[e.tipo] || 0.3 });
+    for (const k in this.otros) { const o = this.otros[k]; l.push({ x: o.x, y: o.y, r: R.jugador }); }
+    return l;
+  };
+
+  // Jugadores que bloquean a los enemigos: el local y los demás (también si están ocupados)
+  Nivel.prototype.cuerposJugadores = function () {
+    const l = [{ x: this.jug.x, y: this.jug.y }];
+    for (const k in this.otros) l.push({ x: this.otros[k].x, y: this.otros[k].y });
+    return l;
   };
 
   Nivel.prototype.quitarBotiquin = function (i) {

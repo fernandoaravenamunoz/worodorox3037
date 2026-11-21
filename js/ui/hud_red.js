@@ -13,9 +13,59 @@
 
   const dibujarOriginal = HUD.dibujar;
   HUD.dibujar = function (ctx, nivel, partida, dt, tactil) {
+    if (nivel.otros && Object.keys(nivel.otros).length) marcadores(ctx, nivel);
     dibujarOriginal(ctx, nivel, partida, dt, tactil);
     if (nivel.versus && nivel.vs) dibujarVs(ctx, nivel, tactil);
   };
+
+  // Etiquetas sobre los demás jugadores (v2.2).
+  //   Cooperativo: nombre y distancia siempre (atenuado tras paredes) y, si quedan fuera
+  //   de la vista, una flecha en el borde que apunta hacia ellos.
+  //   Versus: solo el nombre cuando el rival está a la vista (sin ver a través de paredes).
+  function marcadores(ctx, nivel) {
+    const jug = nivel.jug, coop = !nivel.versus;
+    const A = C.PANT.ANCHO, alto = C.PANT.VISTA_ALTO;
+    const parpadeo = Math.floor(HUD.t * 4) % 2 === 0;
+    for (const k in nivel.otros) {
+      const o = nivel.otros[k];
+      const pj = W.PERSONAJES[o.personaje];
+      const nombre = pj ? pj.nombre : 'JUGADOR ' + (+k + 1);
+      const col = COL(+k);
+      const dist = Math.hypot(o.x - jug.x, o.y - jug.y);
+      const pr = W.raycaster.proyectar(jug, o.x, o.y, 0.8);
+      const enPantalla = pr && pr.x > 8 && pr.x < A - 8;
+      if (!coop && (!enPantalla || pr.tapado || pr.prof > C.PANT.NIEBLA * 0.9)) continue;
+      if (enPantalla) {
+        const y = Math.max(10, Math.min(alto - 20, Math.round(pr.y - pr.alto - 12)));
+        const atenuado = pr.tapado;
+        const txt = nombre + (coop ? ' ' + Math.round(dist) + 'M' : '');
+        const w = W.fuente.ancho(txt, 1);
+        ctx.globalAlpha = atenuado ? 0.55 : 1;
+        ctx.fillStyle = 'rgba(7,6,13,0.8)';
+        ctx.fillRect(Math.round(pr.x - w / 2) - 3, y - 2, w + 6, 10);
+        ctx.fillStyle = col;
+        ctx.fillRect(Math.round(pr.x - w / 2) - 3, y + 8, w + 6, 1);
+        // triangulito que apunta al jugador
+        ctx.fillRect(Math.round(pr.x) - 2, y + 9, 5, 1);
+        ctx.fillRect(Math.round(pr.x) - 1, y + 10, 3, 1);
+        ctx.fillRect(Math.round(pr.x), y + 11, 1, 1);
+        T(ctx, txt, Math.round(pr.x), y, col, 1, 'centro');
+        ctx.globalAlpha = 1;
+      } else if (coop) {
+        // Fuera de la vista: flecha en el borde izquierdo o derecho
+        const rel = Math.atan2(o.y - jug.y, o.x - jug.x) - jug.ang;
+        const a = Math.atan2(Math.sin(rel), Math.cos(rel));
+        const der = a > 0;
+        const y = Math.round(alto / 2 - 30 + (+k) * 14);
+        const x = der ? A - 10 : 10;
+        ctx.fillStyle = 'rgba(7,6,13,0.8)';
+        ctx.fillRect(der ? x - 52 : x - 4, y - 4, 56, 13);
+        ctx.fillStyle = parpadeo ? col : PAL.blanco;
+        for (let i = 0; i < 4; i++) ctx.fillRect(der ? x - i : x + i - 3, y - i + 3, 1, 1 + i * 2);
+        T(ctx, nombre, der ? x - 8 : x + 4, y, col, 1, der ? 'der' : 'izq');
+      }
+    }
+  }
 
   // Se dibuja sobre la vista 3D de 32 bits (480×234)
   function dibujarVs(ctx, nivel, tactil) {

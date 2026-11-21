@@ -260,8 +260,22 @@ prefijo de red `worodorox3073-v2-`, así que no se encuentra con copias anterior
 - Los 12 niveles, los puzzles y todas las reglas (incluido el multijugador) son los mismos de la versión 1.0.
   El protocolo de red no cambió: la 1.0 y la 2.0 pueden jugar juntas.
 
+## Versión 2.1
+- **Todos los cuerpos son sólidos:** enemigos (dron, perseguidor, guardián, dron cazador) y jugadores ya no se
+  atraviesan. El jugador se desliza por su borde al chocar; los drones dan la vuelta al topar a un jugador
+  y el perseguidor se detiene al alcanzarte (y te golpea con retroceso). Regla para todas las versiones futuras.
+- **El audio se corta al minimizar** la app en Android (o al cambiar de pestaña en el PC) y vuelve al regresar.
+
+## Versión 2.2
+- **Multijugador: ahora siempre ves a tus compañeros.** Antes todos aparecían en la misma casilla, uno dentro
+  del otro, y no se veían hasta separarse. Ahora cada jugador aparece en una casilla distinta junto al inicio.
+- **Etiquetas sobre los jugadores:** en el cooperativo cada compañero lleva su nombre y la distancia en metros
+  (atenuada si hay una pared en medio) y, si queda fuera de la vista, una flecha en el borde indica hacia
+  dónde girar. En versus el nombre del rival aparece solo cuando está a la vista (no se ve a través de paredes).
+- Para jugar en red, **todos deben usar la misma versión** (VERSIÓN 2.2 en el título).
+
 ## Pendiente
-Nada: la versión 2.0 en 32 bits está completa.
+Nada.
 
 ## Licencia
 Código bajo licencia MIT (ver `LICENSE`): puedes usarlo, modificarlo y compartirlo citando al autor.
