@@ -5,14 +5,24 @@
 window.W = window.W || {};
 
 W.config = {
-  // Resolución interna (se escala a la ventana)
+  // Resolución de DISEÑO de las pantallas de interfaz (puzzles, menús, libreta, salas 2D).
+  // Esas pantallas se dibujan en una capa de 320×180 que se amplía a la pantalla real.
   ANCHO: 320,
   ALTO: 180,
+
+  // Pantalla real del juego en 32 bits (como DuMulti): la vista 3D y el HUD se dibujan aquí
+  PANT: {
+    ANCHO: 480, ALTO: 270,
+    HUD_ALTO: 36,            // barra inferior tipo Doom
+    VISTA_ALTO: 234,         // la vista 3D ocupa todo menos la barra
+    PLANO: 0.66,             // campo de visión (≈ 67°)
+    NIEBLA: 12               // casillas a las que todo se pierde en la oscuridad
+  },
 
   // Cámara: PLANO define el campo de visión (0,72 ≈ 72°)
   PLANO: 0.72,
 
-  // Tamaño de las texturas de pared (64×64) y de los sprites (32×32)
+  // Tamaño de las texturas de pared (64×64) y de los sprites (64×64 en 32 bits)
   TEX: 64,
   SPR: 32,
 

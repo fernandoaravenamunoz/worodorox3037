@@ -19,9 +19,25 @@
   const canvas = document.getElementById('pantalla');
   const ctx = canvas.getContext('2d');
   const contenedor = document.getElementById('contenedor');
-  canvas.width = C.ANCHO;
-  canvas.height = C.ALTO;
+  // Pantalla real de 32 bits (480×270): vista 3D y HUD
+  const PA = C.PANT;
+  canvas.width = PA.ANCHO;
+  canvas.height = PA.ALTO;
   ctx.imageSmoothingEnabled = false;
+  // Capa de interfaz de 320×180 (puzzles, menús, libreta, mapa, salas 2D): se dibuja aparte
+  // y se amplía a la pantalla. Los clics siguen llegando en coordenadas de 320×180.
+  const lienzoUI = document.createElement('canvas');
+  lienzoUI.width = C.ANCHO; lienzoUI.height = C.ALTO;
+  const ui = lienzoUI.getContext('2d');
+  ui.imageSmoothingEnabled = false;
+  function capa(dibujarEn) {
+    ui.setTransform(1, 0, 0, 1, 0, 0);
+    ui.globalAlpha = 1;
+    ui.clearRect(0, 0, C.ANCHO, C.ALTO);
+    dibujarEn(ui);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(lienzoUI, 0, 0, PA.ANCHO, PA.ALTO);
+  }
 
   W.raycaster.iniciar(ctx);
   W.Entrada.iniciar(canvas, contenedor);
@@ -60,9 +76,9 @@
 
   // Escala el contenedor para llenar la ventana manteniendo 16:9
   function ajustar() {
-    const esc = Math.min(window.innerWidth / C.ANCHO, window.innerHeight / C.ALTO);
-    contenedor.style.width = Math.floor(C.ANCHO * esc) + 'px';
-    contenedor.style.height = Math.floor(C.ALTO * esc) + 'px';
+    const esc = Math.min(window.innerWidth / PA.ANCHO, window.innerHeight / PA.ALTO);
+    contenedor.style.width = Math.floor(PA.ANCHO * esc) + 'px';
+    contenedor.style.height = Math.floor(PA.ALTO * esc) + 'px';
   }
   window.addEventListener('resize', ajustar);
   ajustar();
@@ -466,6 +482,7 @@
     }
     if (teclas.indexOf('KeyM') >= 0 && W.Audio) W.Audio.alternar();
     if (teclas.indexOf('KeyP') >= 0) mostrarFps = !mostrarFps;
+    if (teclas.indexOf('KeyC') >= 0) fijarCalidad(W.raycaster.calidad === 'alta' ? 'media' : 'alta', true);
 
     switch (estado) {
       case 'titulo':
@@ -682,67 +699,104 @@
   }
 
   // ---------- Dibujo por estado ----------
-  function dibujarMundo() {
-    W.raycaster.render(ctx, nivel.jug, nivel.mapa, nivel.sprites(), nivel.conos);
+  // La vista 3D y el HUD del laberinto se dibujan en 32 bits directo en la pantalla.
+  // Las demás pantallas todavía usan el diseño de 320×180 y van en la capa de interfaz.
+  function animar(t) {
+    W.luces.actualizar(t);
+    W.texturas.actualizar(t, W.luces.fases);
   }
+  function dibujarMundo(conBarra) {
+    animar(nivel.tiempo);
+    W.raycaster.render(ctx, nivel.jug, nivel.mapa, nivel.sprites(), nivel.conos);
+    if (conBarra !== false) W.HUD.barra(ctx, nivel, partida, tactil());
+  }
+  function dibujarFondo() {
+    animar(tiempo);
+    W.raycaster.render(ctx, fondo.jug, fondo.mapa, fondo.sprites(), null);
+    ctx.fillStyle = PAL.fondo; ctx.fillRect(0, PA.VISTA_ALTO, PA.ANCHO, PA.HUD_ALTO);
+  }
+  function pantallaNegra() { ctx.fillStyle = PAL.fondo; ctx.fillRect(0, 0, PA.ANCHO, PA.ALTO); }
 
   function dibujar(dt) {
     const t = tactil();
     switch (estado) {
       case 'titulo':
-        W.raycaster.render(ctx, fondo.jug, fondo.mapa, fondo.sprites(), null);
-        W.Menus.titulo(ctx, tiempo, menuTitulo);
-        if (avisoTitulo) W.HUD.textoConCaja(ctx, avisoTitulo, C.ANCHO / 2, 158, PAL.rojo, PAL.rojo);
+        dibujarFondo();
+        capa(function (g) {
+          W.Menus.titulo(g, tiempo, menuTitulo);
+          if (avisoTitulo) W.HUD.textoConCaja(g, avisoTitulo, C.ANCHO / 2, 158, PAL.rojo, PAL.rojo);
+        });
         break;
-      case 'historia': W.Menus.historia(ctx, tEstado, t); break;
-      case 'seleccion': W.Menus.Seleccion.dibujar(ctx, tiempo); break;
+      case 'historia': pantallaNegra(); capa(function (g) { W.Menus.historia(g, tEstado, t); }); break;
+      case 'seleccion': pantallaNegra(); capa(function (g) { W.Menus.Seleccion.dibujar(g, tiempo); }); break;
       case 'redMenu':
-        W.raycaster.render(ctx, fondo.jug, fondo.mapa, fondo.sprites(), null);
-        ctx.fillStyle = 'rgba(7,6,13,0.7)'; ctx.fillRect(0, 0, C.ANCHO, C.ALTO);
-        W.HUD.texto(ctx, 'MULTIJUGADOR', C.ANCHO / 2, 30, PAL.magenta, 2, 'centro');
-        W.HUD.texto(ctx, 'JUEGAS CON ' + W.PERSONAJES[RED.personaje].nombre + '. COOPERATIVO O VERSUS, HASTA 4 POR INTERNET', C.ANCHO / 2, 50, PAL.gris, 1, 'centro');
-        menuRed.dibujar(ctx);
-        if (RED.error) W.HUD.texto(ctx, RED.error, C.ANCHO / 2, 160, PAL.rojo, 1, 'centro');
+        dibujarFondo();
+        capa(function (g) {
+          g.fillStyle = 'rgba(7,6,13,0.7)'; g.fillRect(0, 0, C.ANCHO, C.ALTO);
+          W.HUD.texto(g, 'MULTIJUGADOR', C.ANCHO / 2, 30, PAL.magenta, 2, 'centro');
+          W.HUD.texto(g, 'JUEGAS CON ' + W.PERSONAJES[RED.personaje].nombre + '. COOPERATIVO O VERSUS, HASTA 4 POR INTERNET', C.ANCHO / 2, 50, PAL.gris, 1, 'centro');
+          menuRed.dibujar(g);
+          if (RED.error) W.HUD.texto(g, RED.error, C.ANCHO / 2, 160, PAL.rojo, 1, 'centro');
+        });
         break;
-      case 'redCodigo': W.MenuRed.Codigo.dibujar(ctx, tiempo); break;
-      case 'redLobby': W.MenuRed.Sala.dibujar(ctx, tiempo); break;
+      case 'redCodigo': pantallaNegra(); capa(function (g) { W.MenuRed.Codigo.dibujar(g, tiempo); }); break;
+      case 'redLobby': pantallaNegra(); capa(function (g) { W.MenuRed.Sala.dibujar(g, tiempo); }); break;
       case 'jugando':
-        dibujarMundo();
+        dibujarMundo(false);
         W.HUD.dibujar(ctx, nivel, partida, dt, t);
-        W.Menus.cartelNivel(ctx, nivel.def, tCartel);
+        W.HUD.cartel(ctx, nivel.def, tCartel);
         if (!t && !W.Entrada.bloqueado && !W.Entrada.modoArrastre && tCartel > 0.5) {
-          W.HUD.textoConCaja(ctx, 'CLIC PARA CAPTURAR EL MOUSE', C.ANCHO / 2, 124, PAL.amarillo, PAL.amarillo);
+          W.HUD.textoConCaja32(ctx, 'CLIC PARA CAPTURAR EL MOUSE', PA.ANCHO / 2, 168, PAL.amarilloClaro, PAL.amarillo);
         }
         break;
       case 'puzzle':
-        if (puzzleCtx && puzzleCtx.volverA === 'sala2d' && sala) sala.dibujar(ctx); else if (nivel) dibujarMundo();
-        if (puzzle) puzzle.dibujar(ctx);
+        if (puzzleCtx && puzzleCtx.volverA === 'sala2d' && sala) { pantallaNegra(); capa(function (g) { sala.dibujar(g); if (puzzle) puzzle.dibujar(g); }); }
+        else { if (nivel) dibujarMundo(); else pantallaNegra(); capa(function (g) { if (puzzle) puzzle.dibujar(g); }); }
         break;
-      case 'verPista': dibujarMundo(); W.Menus.verPista(ctx, pistaVista, t); break;
-      case 'mapa': W.MapaUI.dibujar(ctx, nivel, tiempo); break;
-      case 'libreta': W.Libreta.dibujar(ctx, partida); break;
+      case 'verPista': dibujarMundo(); capa(function (g) { W.Menus.verPista(g, pistaVista, t); }); break;
+      case 'mapa': pantallaNegra(); capa(function (g) { W.MapaUI.dibujar(g, nivel, tiempo); }); break;
+      case 'libreta': pantallaNegra(); capa(function (g) { W.Libreta.dibujar(g, partida); }); break;
       case 'pausa':
-        if (volverDe === 'sala2d' && sala) sala.dibujar(ctx); else dibujarMundo();
-        W.Menus.pausa(ctx, menuPausa);
+        if (volverDe === 'sala2d' && sala) { pantallaNegra(); capa(function (g) { sala.dibujar(g); W.Menus.pausa(g, menuPausa); }); }
+        else { dibujarMundo(); capa(function (g) { W.Menus.pausa(g, menuPausa); }); }
         break;
       case 'sala2d':
-        sala.dibujar(ctx);
-        W.HUD.dibujar2d(ctx, sala, partida, dt, t);
+        pantallaNegra();
+        capa(function (g) { sala.dibujar(g); W.HUD.dibujar2d(g, sala, partida, dt, t); });
         break;
       case 'muerte':
-        if (sala) sala.dibujar(ctx); else dibujarMundo();
-        W.Menus.muerte(ctx, tEstado, t);
+        if (sala) { pantallaNegra(); capa(function (g) { sala.dibujar(g); W.Menus.muerte(g, tEstado, t); }); }
+        else { dibujarMundo(); capa(function (g) { W.Menus.muerte(g, tEstado, t); }); }
         break;
-      case 'nivelCompleto': dibujarMundo(); W.Menus.nivelCompleto(ctx, tEstado, nivel.def, partida, t); break;
-      case 'final': W.Menus.final(ctx, tEstado, partida ? partida.personaje : 'chispa', partida || W.Partida.nueva('chispa'), t); break;
-      case 'progreso': W.Progreso.dibujar(ctx, tiempo); break;
-      case 'vsFin': W.HUD.resultadosVs(ctx, vsResultado, tEstado, t, RED.puesto); break;
+      case 'nivelCompleto': dibujarMundo(); capa(function (g) { W.Menus.nivelCompleto(g, tEstado, nivel.def, partida, t); }); break;
+      case 'final': pantallaNegra(); capa(function (g) { W.Menus.final(g, tEstado, partida ? partida.personaje : 'chispa', partida || W.Partida.nueva('chispa'), t); }); break;
+      case 'progreso': pantallaNegra(); capa(function (g) { W.Progreso.dibujar(g, tiempo); }); break;
+      case 'vsFin': pantallaNegra(); capa(function (g) { W.HUD.resultadosVs(g, vsResultado, tEstado, t, RED.puesto); }); break;
+    }
+  }
+
+  // ---------- Calidad automática (de DuMulti) ----------
+  // Si durante 3 segundos de juego el promedio baja de ~45 cuadros por segundo,
+  // el piso y el techo pasan a calcularse cada 2 píxeles. Tecla C: cambiar a mano.
+  let medidaT = 0, medidaN = 0, calidadManual = false;
+  function fijarCalidad(c, manual) {
+    W.raycaster.calidad = c;
+    if (manual) calidadManual = true;
+    W.HUD.mostrar('CALIDAD ' + (c === 'alta' ? 'ALTA' : 'MEDIA (MAS RAPIDO)'), 2);
+  }
+  function vigilarRendimiento(dt) {
+    if (estado !== 'jugando' || calidadManual || W.raycaster.calidad !== 'alta') return;
+    medidaT += dt; medidaN++;
+    if (medidaT >= 3) {
+      if (medidaN / medidaT < 45) fijarCalidad('media', false);
+      medidaT = 0; medidaN = 0;
     }
   }
 
   // ---------- Bucle ----------
   function bucle(ahora) {
-    let dt = (ahora - ultimo) / 1000;
+    // (el primer cuadro puede traer una marca de tiempo anterior: nunca negativo)
+    let dt = Math.max(0, (ahora - ultimo) / 1000);
     ultimo = ahora;
     if (dt > 0.05) dt = 0.05;
     tiempo += dt;
@@ -752,11 +806,12 @@
     const entrada = W.Entrada.leer(dt);
     actualizar(dt, entrada);
     dibujar(dt);
+    vigilarRendimiento(dt);
 
     // Contador de cuadros por segundo (tecla P)
     cuadros++; acumFps += dt;
     if (acumFps >= 0.5) { fps = Math.round(cuadros / acumFps); cuadros = 0; acumFps = 0; }
-    if (mostrarFps) W.HUD.texto(ctx, fps + ' FPS', 4, 4, '#7ff3ff');
+    if (mostrarFps) W.HUD.texto(ctx, fps + ' FPS ' + (W.raycaster.calidad === 'alta' ? '' : '(MEDIA)'), 4, 4, '#7ff3ff');
 
     requestAnimationFrame(bucle);
   }

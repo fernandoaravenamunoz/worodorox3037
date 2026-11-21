@@ -53,7 +53,7 @@
     T(ctx, '3073', A / 2, 44, PAL.magenta, 3, 'centro');
     T(ctx, 'ESCAPA DE LA NAVE CRIADERO', A / 2, 66, '#8d93ad', 1, 'centro');
     menu.dibujar(ctx);
-    T(ctx, 'VERSION 1.0 - UN JUGADOR, COOPERATIVO Y VERSUS - M: SONIDO', A / 2, 171, '#4a4f63', 1, 'centro');
+    T(ctx, 'VERSION 2.0 - 32 BITS - UN JUGADOR, COOPERATIVO Y VERSUS - M: SONIDO', A / 2, 171, '#4a4f63', 1, 'centro');
   }
 
   const HISTORIA = [

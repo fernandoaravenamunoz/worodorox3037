@@ -1,6 +1,6 @@
 // =====================================================
 // Interfaz del versus (amplía W.HUD sin tocar hud.js)
-//   - Barra de poderes con su recarga (abajo a la izquierda)
+//   - Barra de poderes con su recarga (abajo a la izquierda, sobre la vista 3D de 32 bits)
 //   - Escudo, aturdimiento por EMP y "derribado" (combate)
 //   - Marcador del combate y pantalla de resultados
 // =====================================================
@@ -17,34 +17,36 @@
     if (nivel.versus && nivel.vs) dibujarVs(ctx, nivel, tactil);
   };
 
+  // Se dibuja sobre la vista 3D de 32 bits (480×234)
   function dibujarVs(ctx, nivel, tactil) {
     const jug = nivel.jug, vs = nivel.vs, cfg = W.configRed.VS;
-    const alto = H - C.HUD_ALTO;
+    const A = C.PANT.ANCHO, alto = C.PANT.VISTA_ALTO;
+    const caja = HUD.textoConCaja32;
 
     // Escudo: marco cian
     if (jug.escudo > 0) {
       ctx.fillStyle = Math.floor(HUD.t * 8) % 2 || jug.escudo > 1 ? PAL.cian : PAL.cianOsc;
       ctx.fillRect(0, 0, A, 2); ctx.fillRect(0, alto - 2, A, 2);
       ctx.fillRect(0, 0, 2, alto); ctx.fillRect(A - 2, 0, 2, alto);
-      T(ctx, 'ESCUDO ' + jug.escudo.toFixed(1) + ' S', A / 2, 30, PAL.cianClaro, 1, 'centro');
+      T(ctx, 'ESCUDO ' + jug.escudo.toFixed(1) + ' S', A / 2, 40, PAL.cianClaro, 1, 'centro');
     }
     // Aturdido: estática amarilla
     if (jug.aturdido > 0) {
       ctx.fillStyle = 'rgba(232,185,35,0.25)';
       for (let k = 0; k < 18; k++) ctx.fillRect((k * 71 + Math.floor(HUD.t * 900)) % A, (k * 29 + Math.floor(HUD.t * 300)) % alto, 20, 1);
-      HUD.textoConCaja(ctx, 'EMP: SISTEMAS REINICIANDO ' + jug.aturdido.toFixed(1) + ' S', A / 2, 64, PAL.amarillo, PAL.amarillo);
+      caja(ctx, 'EMP: SISTEMAS REINICIANDO ' + jug.aturdido.toFixed(1) + ' S', A / 2, 80, PAL.amarillo, PAL.amarillo);
     }
     // Derribado (combate)
     if (vs.caido > 0) {
       ctx.fillStyle = 'rgba(40,4,8,0.7)'; ctx.fillRect(0, 0, A, alto);
-      T(ctx, 'DERRIBADO', A / 2, 60, PAL.rojo, 2, 'centro');
-      T(ctx, 'VUELVES A LA ARENA EN ' + Math.ceil(vs.caido), A / 2, 80, PAL.gris, 1, 'centro');
+      T(ctx, 'DERRIBADO', A / 2, 84, PAL.rojo, 3, 'centro');
+      T(ctx, 'VUELVES A LA ARENA EN ' + Math.ceil(vs.caido), A / 2, 112, PAL.gris, 1, 'centro');
     }
 
     // Barra de poderes
     const lista = nivel.poderes().concat(['escudo']);
-    let x = 4;
-    const y = alto - 12;
+    let x = 6;
+    const y = alto - 14;
     lista.forEach(function (nombre, i) {
       const listo = vs.cd[nombre] <= 0;
       const tecla = nombre === 'escudo' ? 'R' : String(i + 1);
@@ -69,11 +71,11 @@
       const partes = filas.map(function (p) { return { p: p, s: W.Red.nombreDe(p).split(' ')[0] + ' ' + m.victorias[p] }; });
       const total = partes.reduce(function (s, q) { return s + W.fuente.ancho(q.s, 1) + 8; }, 0) - 8;
       let xx = Math.round(A / 2 - total / 2);
-      ctx.fillStyle = 'rgba(7,6,13,0.7)'; ctx.fillRect(xx - 3, 13, total + 6, 9);
-      for (const q of partes) { T(ctx, q.s, xx, 15, COL(q.p)); xx += W.fuente.ancho(q.s, 1) + 8; }
-      T(ctx, 'META: ' + cfg.VICTORIAS + ' VICTORIAS', A / 2, 24, PAL.grisOsc, 1, 'centro');
+      ctx.fillStyle = 'rgba(7,6,13,0.75)'; ctx.fillRect(xx - 4, 24, total + 8, 11);
+      for (const q of partes) { T(ctx, q.s, xx, 27, COL(q.p)); xx += W.fuente.ancho(q.s, 1) + 8; }
+      T(ctx, 'META: ' + cfg.VICTORIAS + ' VICTORIAS', A / 2, 38, PAL.grisOsc, 1, 'centro');
     } else if (nivel.modo === 'carrera' && nivel.tiempo < 8) {
-      HUD.textoConCaja(ctx, 'CARRERA: GANA QUIEN LLEGUE PRIMERO A LA SALIDA', A / 2, 30, PAL.verde, PAL.verde);
+      caja(ctx, 'CARRERA: GANA QUIEN LLEGUE PRIMERO A LA SALIDA', A / 2, 28, PAL.verde, PAL.verde);
     }
   }
 

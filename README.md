@@ -1,9 +1,14 @@
-# Worodorox 3073 — Versión 1.0 (un jugador, cooperativo y versus)
+# Worodorox 3073 — Versión 2.0 · 32 bits (un jugador, cooperativo y versus)
 
 Laberinto en primera persona con puzzles, salas de plataforma 2D, enemigos que se sellan con puzzles,
 12 niveles en 4 zonas, jefe final, música synthwave generada por código, versión táctil lista para Android
 y multijugador por internet: cooperativo y versus (carrera y combate todos contra todos).
 JavaScript puro, sin dependencias, sin imágenes ni audios externos.
+
+**Versión 2.0 (32 bits):** la vista en primera persona usa ahora el motor "Alarma neón" de DuMulti:
+480×270, mapa de luz de colores con tramado, niebla, texturas de 64×64 con pantallas, alarmas y paneles dañados,
+sprites de 64×64, HUD tipo Doom con el retrato del personaje y el arma dibujada en primera persona.
+Los niveles, puzzles y reglas son los mismos de la versión 1.0.
 
 ## Jugar en línea
 **[https://fernandoaravenamunoz.github.io/worodorox3073/](https://fernandoaravenamunoz.github.io/worodorox3073/)**
@@ -31,6 +36,7 @@ Si el navegador bloquea algo al abrirlo como archivo, usa un servidor local dent
 | Versus: escudo | R | Botón ESCUDO |
 | Pausa | Esc | Botón II |
 | Sonido sí/no · FPS | M · P | (en el menú de pausa) |
+| Calidad alta / media | C (se baja sola si el equipo va lento) | (automática) |
 
 ## Cómo se juega
 - **Pistas**: los hologramas cian de las paredes son protocolos de la tripulación. Al acercarte quedan
@@ -88,13 +94,14 @@ js/config.js               constantes, paleta, códigos de casilla, caracteres d
 js/fuente.js               fuente de píxeles 3×5 (HUD, hologramas, libreta)
 js/input.js                teclado, mouse y táctil; modos 3d / 2d / ui
 js/main.js                 bucle y máquina de estados (título, juego, puzzle, sala 2D, muerte, resultados...)
-js/motor3d/                raycaster, mapa, texturas por zona; texturas_red.js (palancas, hologramas cifrados, escudo, minas)
+js/motor3d/                raycaster 32 bits, luces (mapa de luz de colores), mapa, texturas "Alarma neón" por zona
+                           (también palancas, hologramas cifrados, jugadores, escudo y minas)
 js/motor2d/plataformas.js  salas 2D: plataformas, cajas, placas, interruptores, terminal, persecución
 js/puzzles/                pistas.js + base.js (interfaz común) + 7 puzzles
 js/entidades/              personajes y armas, jugador (con escudo y EMP), enemigos, trampas
 js/juego/                  partida (guardado), nivel (lógica del laberinto), multijugador (palancas,
                            pistas repartidas, apoyo al ducto y todo el versus), jefe (IA)
-js/ui/                     HUD, hud_red.js (poderes, marcador, resultados), mapa automático, libreta, menús,
+js/ui/                     HUD 32 bits, retrato.js (cara del HUD), arma_fp.js (arma en primera persona), hud_red.js (poderes, marcador, resultados), mapa automático, libreta, menús,
                            menu_red.js, progreso.js (pantalla y registro del progreso)
 js/audio/synth.js          música synthwave y efectos con Web Audio API
 js/red/                    peerjs.min.js, config_red.js (incluye el ajuste del versus), transporte.js, red.js
@@ -240,8 +247,12 @@ Crea una cuenta en un proveedor de TURN con plan gratuito y pega sus datos en `j
 dentro de `iceServers`. **Todos los jugadores deben usar la misma versión del juego**: esta versión usa el
 prefijo de red `worodorox3073-v2-`, así que no se encuentra con copias anteriores (actualiza también el APK).
 
-## Pendiente
-Nada: todas las fases y las ideas registradas están implementadas.
+## Pendiente (versión 2.0 en 32 bits)
+- **Fase 1 (lista):** motor 32 bits, texturas, luces, sprites, HUD con retratos y armas en primera persona.
+- Fase 2: puzzles, libreta y mapa automático rediseñados en 480×270 (hoy se ven ampliados desde 320×180).
+- Fase 3: menús, sala de espera y pantallas de resultados en 480×270.
+- Fase 4: salas 2D con el mismo estilo.
+- Fase 5: prueba de los 12 niveles, multijugador y APK.
 
 ## Licencia
 Código bajo licencia MIT (ver `LICENSE`): puedes usarlo, modificarlo y compartirlo citando al autor.
