@@ -217,11 +217,34 @@
     return activo;
   }
 
+  // ---------- Silencio al minimizar ----------
+  // Al minimizar la app en Android (o cambiar de pestaña / ventana en el PC) el audio se
+  // detiene por completo, y vuelve al regresar. En multijugador la partida sigue
+  // funcionando en segundo plano: solo se calla el sonido.
+  let enSegundoPlano = false;
+  function silenciar() {
+    enSegundoPlano = true;
+    if (ctx && ctx.state === 'running') ctx.suspend().catch(function () { /* nada */ });
+  }
+  function reanudar() {
+    if (!enSegundoPlano) return;
+    enSegundoPlano = false;
+    if (ctx && ctx.state === 'suspended') ctx.resume().catch(function () { /* nada */ });
+  }
+  document.addEventListener('visibilitychange', function () { if (document.hidden) silenciar(); else reanudar(); });
+  window.addEventListener('pagehide', silenciar);
+  window.addEventListener('pageshow', function () { if (!document.hidden) reanudar(); });
+  // Android (Capacitor): eventos de la app al pasar a segundo plano y volver
+  document.addEventListener('pause', silenciar);
+  document.addEventListener('resume', reanudar);
+  window.addEventListener('blur', function () { if (document.hidden) silenciar(); });
+
   W.Audio = {
     iniciar: iniciar,
     musica: musica,
     sfx: sfx,
     alternar: alternar,
-    get activo() { return activo; }
+    get activo() { return activo; },
+    get estado() { return ctx ? ctx.state : 'sin iniciar'; }
   };
 })();

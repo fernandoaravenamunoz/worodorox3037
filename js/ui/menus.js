@@ -103,7 +103,11 @@
         const r = Seleccion.tarjeta(i), sel = i === Seleccion.sel;
         U().boton(ctx, r, '', sel ? PAL.cianClaro : PAL.cianOsc, sel ? '#10202a' : '#0b0a18');
         const bote = sel ? Math.round(Math.sin(t * 6) * 1) : 0;
-        W.Personajes.dibujarCuerpo(ctx, p.id, r.x + 17, r.y + 8 + bote, 1, sel ? t * 8 : 0, 3, false);
+        // Retrato del HUD al doble de tamaño (68 píxeles reales: nítido en 32 bits)
+        const ret = W.Retrato.cuadros(p.id)[sel ? W.Retrato.elegir(t, false) : 0];
+        const lado = W.Retrato.TAM * 2 / 1.5;
+        ctx.fillStyle = sel ? '#06141a' : '#07060d'; ctx.fillRect(r.x + (r.w - lado) / 2 - 1, r.y + 6 + bote - 1, lado + 2, lado + 2);
+        ctx.drawImage(ret, r.x + (r.w - lado) / 2, r.y + 6 + bote, lado, lado);
         T(ctx, p.nombre, r.x + r.w / 2, r.y + 58, sel ? PAL.blanco : PAL.gris, 1, 'centro');
         T(ctx, p.arma, r.x + r.w / 2, r.y + 68, PAL.amarillo, 1, 'centro');
         T(ctx, 'VIDA ' + p.vida, r.x + r.w / 2, r.y + 78, PAL.grisOsc, 1, 'centro');

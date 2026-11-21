@@ -247,12 +247,21 @@ Crea una cuenta en un proveedor de TURN con plan gratuito y pega sus datos en `j
 dentro de `iceServers`. **Todos los jugadores deben usar la misma versión del juego**: esta versión usa el
 prefijo de red `worodorox3073-v2-`, así que no se encuentra con copias anteriores (actualiza también el APK).
 
-## Pendiente (versión 2.0 en 32 bits)
-- **Fase 1 (lista):** motor 32 bits, texturas, luces, sprites, HUD con retratos y armas en primera persona.
-- Fase 2: puzzles, libreta y mapa automático rediseñados en 480×270 (hoy se ven ampliados desde 320×180).
-- Fase 3: menús, sala de espera y pantallas de resultados en 480×270.
-- Fase 4: salas 2D con el mismo estilo.
-- Fase 5: prueba de los 12 niveles, multijugador y APK.
+## Versión 2.0: qué cambió
+- **Vista 3D (motor de DuMulti):** 480×270, mapa de luz de colores con tramado, niebla, caras con volumen,
+  texturas variadas por casilla (pantallas con mensajes de la nave, alarmas giratorias, paneles dañados)
+  y animadas. Calidad automática (tecla C para cambiarla).
+- **Texturas y sprites de 64×64** con el color de cada zona; jugadores con escudo y aturdidos; minas; chispas del EMP.
+- **HUD tipo Doom** con el retrato de cada personaje (pone cara de dolor al recibir daño) y armas dibujadas en primera persona.
+- **Interfaz en 480×270:** puzzles, libreta, mapa, menús, sala de espera y resultados se dibujan directo en la
+  pantalla de 32 bits (js/ui/capa_ui.js), con píxeles alineados y la fuente nítida del HUD. Selección de personaje,
+  sala de espera y resultados muestran los retratos.
+- **Salas 2D** con baldosas de 15×15 en estilo "Alarma neón" y fondo con paralaje del color de la zona.
+- Los 12 niveles, los puzzles y todas las reglas (incluido el multijugador) son los mismos de la versión 1.0.
+  El protocolo de red no cambió: la 1.0 y la 2.0 pueden jugar juntas.
+
+## Pendiente
+Nada: la versión 2.0 en 32 bits está completa.
 
 ## Licencia
 Código bajo licencia MIT (ver `LICENSE`): puedes usarlo, modificarlo y compartirlo citando al autor.

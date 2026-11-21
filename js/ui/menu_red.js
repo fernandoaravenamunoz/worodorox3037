@@ -120,7 +120,9 @@
         U().boton(ctx, r, '', j ? COL[i] : '#1d1b2e', '#0b0a18');
         if (j) {
           const p = W.PERSONAJES[j.personaje];
-          W.Personajes.dibujarCuerpo(ctx, j.personaje, r.x + 26, r.y + 5, 1, t * 6 + i, 2, false);
+          const lado = W.Retrato.TAM / 1.5;   // retrato del HUD a su tamaño real (34 píxeles)
+          ctx.fillStyle = '#06141a'; ctx.fillRect(r.x + (r.w - lado) / 2 - 1, r.y + 6, lado + 2, lado + 2);
+          ctx.drawImage(W.Retrato.cuadros(j.personaje)[W.Retrato.elegir(t + i * 1.3, false)], r.x + (r.w - lado) / 2, r.y + 7, lado, lado);
           T(ctx, p.nombre, r.x + r.w / 2, r.y + 35, PAL.blanco, 1, 'centro');
           T(ctx, i === 0 ? 'ANFITRION' : (j.puesto === R.puesto ? 'TU' : 'JUGADOR ' + (i + 1)), r.x + r.w / 2, r.y + 44, COL[i], 1, 'centro');
         } else {

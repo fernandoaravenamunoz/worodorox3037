@@ -2,7 +2,7 @@
 // Motor de salas 2D (capa 2): ductos y compartimentos vistos en corte.
 // Se entra por las puertas de marco amarillo del laberinto.
 //
-// Baldosas del mapa de una sala (10×10 píxeles cada una):
+// Baldosas del mapa de una sala (10×10 en el diseño; se dibujan a 15×15 en 32 bits):
 //   #  pared sólida            -  plataforma de un sentido (se atraviesa desde abajo)
 //   ^  pinchos                 B  caja rompible (cualquier arma)
 //   R  rejilla reforzada (solo la rompe Tuerca)
@@ -23,65 +23,93 @@
   const TS = C.T2D;
   const A = C.ANCHO, H = C.ALTO, HB = C.HUD_ALTO;
 
-  // ---------- Imágenes de baldosas (se generan una vez por zona) ----------
+  // ---------- Imágenes de baldosas en 32 bits ----------
+  // Cada baldosa mide 10×10 en el diseño de la sala, pero su imagen se dibuja a 15×15
+  // (la resolución real de 480×270) con el estilo "Alarma neón" de la vista 3D.
   const COLORES_ZONA = {
-    1: { base: '#2a2a3c', luz: '#3a3a52', sombra: '#16151f', fondo: ['#07060d', '#0d0b18', '#120f1f'], acento: '#22e4ff' },
-    2: { base: '#382d29', luz: '#4f3f36', sombra: '#191210', fondo: ['#0a0706', '#140e0b', '#1d1410'], acento: '#ff8a2b' },
-    3: { base: '#241a33', luz: '#36284a', sombra: '#0f0a17', fondo: ['#06040a', '#0d0814', '#160d22'], acento: '#b44dff' },
-    4: { base: '#1d2a30', luz: '#2c3e47', sombra: '#0b1215', fondo: ['#020308', '#070d12', '#0b1418'], acento: '#22e4ff' }
+    1: { base: '#33304a', luz: '#4f4c6a', sombra: '#17151f', fondo: ['#07060d', '#0e0c19', '#151226'], acento: '#ff2bd6', acentoOsc: '#7a1466' },
+    2: { base: '#3d322c', luz: '#5f5044', sombra: '#191210', fondo: ['#0a0706', '#150f0c', '#1f1611'], acento: '#ff8a2b', acentoOsc: '#6b3510' },
+    3: { base: '#2b2140', luz: '#4a3a68', sombra: '#0f0a17', fondo: ['#06040a', '#0e0916', '#170e25'], acento: '#b44dff', acentoOsc: '#4a1a73' },
+    4: { base: '#22323a', luz: '#3d5866', sombra: '#0b1215', fondo: ['#020308', '#08100f', '#0c171b'], acento: '#22e4ff', acentoOsc: '#0f5a6b' }
   };
+  const N = 15;   // tamaño real de cada baldosa en pantalla
   const cacheTiles = {};
   function lienzo(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
-
   function crearTiles(zona) {
     if (cacheTiles[zona]) return cacheTiles[zona];
     const z = COLORES_ZONA[zona] || COLORES_ZONA[1];
     const t = {};
-    function nueva(dibujar) { const c = lienzo(TS, TS); dibujar(c.getContext('2d')); return c; }
-    t['#'] = nueva(function (g) {
-      g.fillStyle = z.base; g.fillRect(0, 0, TS, TS);
-      g.fillStyle = z.luz; g.fillRect(0, 0, TS, 1); g.fillRect(0, 0, 1, TS);
-      g.fillStyle = z.sombra; g.fillRect(0, TS - 1, TS, 1); g.fillRect(TS - 1, 0, 1, TS);
-      g.fillStyle = '#7a828d'; g.fillRect(2, 2, 1, 1); g.fillRect(7, 7, 1, 1);
+    function nueva(dibujar) {
+      const c = lienzo(N, N), g = c.getContext('2d');
+      const R = function (x, y, w, h, col) { g.fillStyle = col; g.fillRect(x, y, w, h); };
+      dibujar(R, g);
+      return c;
+    }
+    function borde(R, col, x, y, w, h) { R(x, y, w, 1, col); R(x, y + h - 1, w, 1, col); R(x, y, 1, h, col); R(x + w - 1, y, 1, h, col); }
+    t['#'] = nueva(function (R) {
+      R(0, 0, N, N, z.base);
+      R(0, 0, N, 1, z.luz); R(0, 0, 1, N, z.luz);
+      R(0, N - 1, N, 1, z.sombra); R(N - 1, 0, 1, N, z.sombra);
+      R(2, 2, 2, 2, '#7a828d'); R(2, 2, 1, 1, '#b4bac4');
+      R(11, 11, 2, 2, '#7a828d'); R(11, 11, 1, 1, '#b4bac4');
+      R(6, 7, 5, 1, z.sombra);
     });
-    t['-'] = nueva(function (g) {
-      g.fillStyle = '#4a4f63'; g.fillRect(0, 0, TS, 3);
-      g.fillStyle = PAL.amarillo; g.fillRect(0, 0, TS, 1);
-      g.fillStyle = '#2a2a3c'; g.fillRect(1, 3, 1, 3); g.fillRect(8, 3, 1, 3);
+    t['-'] = nueva(function (R) {
+      R(0, 0, N, 4, '#4a4f63');
+      for (let x = 0; x < N; x += 4) R(x, 0, 2, 1, PAL.amarillo);
+      R(0, 1, N, 1, '#7a828d'); R(0, 3, N, 1, '#2a2a3c');
+      R(2, 4, 1, 4, '#2a2a3c'); R(12, 4, 1, 4, '#2a2a3c');
     });
-    t['^'] = nueva(function (g) {
-      // Tres pinchos triangulares
-      for (let k = 0; k < 3; k++) {
-        for (let j = 0; j < 4; j++) {
-          g.fillStyle = j === 0 ? '#e6e3ff' : '#8d93ad';
-          g.fillRect(k * 3 + 1 - (j >> 1), 5 + j, 1 + (j >> 1) * 2, 1);
-        }
+    t['^'] = nueva(function (R) {
+      for (let k = 0; k < 3; k++) for (let j = 0; j < 6; j++) {
+        const w = 1 + (j >> 1) * 2;
+        R(k * 5 + 2 - (j >> 1), 8 + j, w, 1, j === 0 ? '#ffffff' : j < 3 ? '#c8cbd6' : '#8d93ad');
       }
-      g.fillStyle = PAL.rojo; g.fillRect(0, TS - 1, TS, 1);
+      R(0, N - 1, N, 1, PAL.rojo); R(0, N - 2, N, 1, PAL.rojoOsc);
     });
-    t.B = nueva(function (g) {
-      g.fillStyle = '#7a4a2a'; g.fillRect(0, 0, TS, TS);
-      g.fillStyle = '#9a6a3a'; g.fillRect(0, 0, TS, 1); g.fillRect(0, 0, 1, TS);
-      g.fillStyle = '#4a2a1a'; g.fillRect(1, 4, 8, 1); g.fillRect(4, 1, 1, 8);
+    t.B = nueva(function (R) {
+      R(0, 0, N, N, '#7a4a2a');
+      R(0, 0, N, 1, '#a8743f'); R(0, 0, 1, N, '#a8743f'); R(0, N - 1, N, 1, '#3a2010'); R(N - 1, 0, 1, N, '#3a2010');
+      R(2, 7, 11, 1, '#4a2a1a'); R(7, 2, 1, 11, '#4a2a1a');
+      R(3, 3, 2, 2, '#5a3418'); R(10, 10, 2, 2, '#5a3418');
     });
-    t.R = nueva(function (g) {
-      g.fillStyle = '#16151f'; g.fillRect(0, 0, TS, TS);
-      g.fillStyle = '#6b6f80';
-      for (let k = 1; k < TS; k += 3) { g.fillRect(k, 0, 1, TS); g.fillRect(0, k, TS, 1); }
-      g.fillStyle = PAL.amarillo; g.fillRect(0, 0, 2, 2); g.fillRect(8, 8, 2, 2);
+    t.R = nueva(function (R) {
+      R(0, 0, N, N, '#16151f');
+      for (let k = 1; k < N; k += 4) { R(k, 0, 1, N, '#6b6f80'); R(0, k, N, 1, '#6b6f80'); }
+      R(0, 0, 3, 3, PAL.amarillo); R(12, 12, 3, 3, PAL.amarillo);
     });
-    t.a = nueva(function (g) { g.fillStyle = '#0f5a6b'; g.fillRect(0, 0, TS, TS); g.fillStyle = PAL.cian; g.fillRect(1, 1, 8, 1); g.fillRect(1, 8, 8, 1); g.fillRect(1, 1, 1, 8); g.fillRect(8, 1, 1, 8); });
-    t.aOff = nueva(function (g) { g.fillStyle = 'rgba(34,228,255,0.25)'; g.fillRect(1, 1, 8, 1); g.fillRect(1, 8, 8, 1); g.fillRect(1, 1, 1, 8); g.fillRect(8, 1, 1, 8); });
-    t.b = nueva(function (g) { g.fillStyle = '#7a1466'; g.fillRect(0, 0, TS, TS); g.fillStyle = PAL.magenta; g.fillRect(1, 1, 8, 1); g.fillRect(1, 8, 8, 1); g.fillRect(1, 1, 1, 8); g.fillRect(8, 1, 1, 8); });
-    t.bOff = nueva(function (g) { g.fillStyle = 'rgba(255,43,214,0.25)'; g.fillRect(1, 1, 8, 1); g.fillRect(1, 8, 8, 1); g.fillRect(1, 1, 1, 8); g.fillRect(8, 1, 1, 8); });
-    t.g = nueva(function (g) { g.fillStyle = '#2d3140'; g.fillRect(2, 0, 6, TS); g.fillStyle = PAL.amarillo; g.fillRect(2, 0, 6, 1); g.fillRect(4, 2, 2, 6); });
-    t.G = nueva(function (g) { g.fillStyle = '#2d3140'; g.fillRect(1, 0, 8, TS); g.fillStyle = PAL.cian; g.fillRect(1, 0, 8, 1); g.fillRect(3, 3, 4, 1); g.fillRect(3, 6, 4, 1); });
-    t.C = nueva(function (g) {
-      g.fillStyle = '#4a4f63'; g.fillRect(0, 0, TS, TS);
-      g.fillStyle = '#6b6f80'; g.fillRect(0, 0, TS, 1); g.fillRect(0, 0, 1, TS);
-      g.fillStyle = '#2a2a3c'; g.fillRect(2, 2, 6, 6);
-      g.fillStyle = PAL.amarillo; g.fillRect(3, 4, 4, 2);
+    t.a = nueva(function (R) { R(0, 0, N, N, PAL.cianOsc); borde(R, PAL.cian, 1, 1, 13, 13); R(4, 4, 7, 7, '#0a3a46'); R(6, 6, 3, 3, PAL.cianClaro); });
+    t.aOff = nueva(function (R) { borde(R, 'rgba(34,228,255,0.3)', 1, 1, 13, 13); });
+    t.b = nueva(function (R) { R(0, 0, N, N, PAL.magentaOsc); borde(R, PAL.magenta, 1, 1, 13, 13); R(4, 4, 7, 7, '#4a0c3e'); R(6, 6, 3, 3, PAL.magentaClaro); });
+    t.bOff = nueva(function (R) { borde(R, 'rgba(255,43,214,0.3)', 1, 1, 13, 13); });
+    t.g = nueva(function (R) {
+      R(3, 0, 9, N, '#2d3140'); R(3, 0, 1, N, '#4a4f63');
+      for (let y = 0; y < N; y += 4) R(3, y, 9, 2, PAL.amarillo);
+      R(6, 4, 3, 7, '#16151f');
     });
+    t.G = nueva(function (R) {
+      R(2, 0, 11, N, '#2d3140'); R(2, 0, 1, N, '#4a4f63');
+      R(2, 0, 11, 1, PAL.cian);
+      R(5, 4, 5, 1, PAL.cian); R(5, 7, 5, 1, PAL.cian); R(5, 10, 5, 1, PAL.cianOsc);
+    });
+    t.C = nueva(function (R) {
+      R(0, 0, N, N, '#4a4f63');
+      R(0, 0, N, 1, '#8d93ad'); R(0, 0, 1, N, '#8d93ad'); R(0, N - 1, N, 1, '#2a2a3c'); R(N - 1, 0, 1, N, '#2a2a3c');
+      R(3, 3, 9, 9, '#2a2a3c');
+      for (let k = 0; k < 9; k += 3) R(3 + k, 6, 2, 3, PAL.amarillo);
+    });
+    // Fondo: paneles lejanos con tiras de neón de la zona (se repite en paralaje)
+    const f = lienzo(96, 180), g = f.getContext('2d');
+    const RF = function (x, y, w, h, col) { g.fillStyle = col; g.fillRect(x, y, w, h); };
+    for (let y = 0; y < 180; y += 30) {
+      RF(0, y, 96, 30, y % 60 ? z.fondo[1] : z.fondo[2]);
+      RF(0, y, 96, 1, z.fondo[2]); RF(0, y + 29, 96, 1, z.fondo[0]);
+      for (let x = 0; x < 96; x += 48) { RF(x + 4, y + 4, 2, 2, '#22202f'); RF(x + 40, y + 24, 2, 2, '#22202f'); }
+    }
+    RF(10, 0, 8, 180, '#0b0a12'); RF(11, 0, 2, 180, z.fondo[2]);
+    RF(60, 52, 30, 3, z.acentoOsc); RF(60, 53, 30, 1, z.acento);
+    RF(24, 130, 20, 14, '#0b0a12'); RF(26, 132, 16, 3, PAL.cianOsc); RF(26, 137, 10, 1, PAL.cianOsc);
+    t.fondo = f;
     cacheTiles[zona] = t;
     t.zona = z;
     return t;
@@ -519,13 +547,11 @@
   Sala.prototype.dibujar = function (ctx) {
     const z = this.tiles.zona, t = this.tiles;
     const cx = Math.round(this.camX), cy = Math.round(this.camY);
-    // Fondo con bandas y tuberías en paralaje
-    for (let i = 0; i < 3; i++) { ctx.fillStyle = z.fondo[i]; ctx.fillRect(0, i * 56, A, 60); }
-    ctx.fillStyle = '#ffffff08';
-    const off = -(cx * 0.35) % 48;
-    for (let x = off; x < A; x += 48) { ctx.fillRect(x, 0, 6, H); ctx.fillRect(x + 14, 20, 2, H); }
-    ctx.fillStyle = z.acento + '22';
-    for (let x = -(cx * 0.2) % 90; x < A; x += 90) ctx.fillRect(x, 40, 30, 2);
+    // Fondo: paneles lejanos con neón de la zona, en paralaje (imagen de 32 bits)
+    ctx.fillStyle = z.fondo[0]; ctx.fillRect(0, 0, A, H);
+    const off = -((cx * 0.35) % 64) - 64;
+    for (let x = off; x < A; x += 64) { ctx.drawImage(t.fondo, x, 0, 64, 120); ctx.drawImage(t.fondo, x, 120, 64, 120); }
+    ctx.fillStyle = 'rgba(7,6,13,0.35)'; ctx.fillRect(0, 0, A, H);
 
     // Baldosas visibles
     const tx0 = Math.max(0, Math.floor(cx / TS)), tx1 = Math.min(this.ancho - 1, Math.floor((cx + A) / TS));
@@ -581,7 +607,7 @@
           if (this.tile(tx, ty - 1) !== 'E') { ctx.fillRect(x + 3, y + 3, 4, 1); ctx.fillRect(x + 4, y + 2, 2, 1); }
           break;
       }
-      if (img) ctx.drawImage(img, x, y);
+      if (img) ctx.drawImage(img, x, y, TS, TS);
     }
     // Plataformas móviles
     for (const pl of this.plataformas) {
@@ -591,7 +617,7 @@
       ctx.fillStyle = PAL.cian; ctx.fillRect(x + pl.w / 2 - 1, y + 2, 2, 1);
     }
     // Cajas
-    for (const c of this.cajas) ctx.drawImage(t.C, Math.round(c.x - cx), Math.round(c.y - cy));
+    for (const c of this.cajas) ctx.drawImage(t.C, Math.round(c.x - cx), Math.round(c.y - cy), TS, TS);
     // Bichos
     for (const b of this.bichos) {
       if (!b.vivo) continue;

@@ -24,20 +24,18 @@
   canvas.width = PA.ANCHO;
   canvas.height = PA.ALTO;
   ctx.imageSmoothingEnabled = false;
-  // Capa de interfaz de 320×180 (puzzles, menús, libreta, mapa, salas 2D): se dibuja aparte
-  // y se amplía a la pantalla. Los clics siguen llegando en coordenadas de 320×180.
-  const lienzoUI = document.createElement('canvas');
-  lienzoUI.width = C.ANCHO; lienzoUI.height = C.ALTO;
-  const ui = lienzoUI.getContext('2d');
-  ui.imageSmoothingEnabled = false;
+  // Capa de interfaz: las pantallas diseñadas en 320×180 (puzzles, menús, libreta, mapa,
+  // salas 2D) se dibujan directo en 480×270, ajustadas a píxeles enteros (js/ui/capa_ui.js).
+  // Los clics siguen llegando en coordenadas de 320×180.
+  const ui = new W.CapaUI(ctx, PA.ANCHO / C.ANCHO);
   function capa(dibujarEn) {
-    ui.setTransform(1, 0, 0, 1, 0, 0);
-    ui.globalAlpha = 1;
-    ui.clearRect(0, 0, C.ANCHO, C.ALTO);
-    dibujarEn(ui);
+    ctx.save();
+    ctx.globalAlpha = 1;
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(lienzoUI, 0, 0, PA.ANCHO, PA.ALTO);
+    dibujarEn(ui);
+    ctx.restore();
   }
+
 
   W.raycaster.iniciar(ctx);
   W.Entrada.iniciar(canvas, contenedor);

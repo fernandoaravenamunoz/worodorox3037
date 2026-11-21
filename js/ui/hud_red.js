@@ -91,9 +91,13 @@
     T(ctx, gano ? 'VICTORIA!' : 'FIN DE LA PARTIDA', A / 2, 12, gano ? PAL.verde : PAL.magenta, 2, 'centro');
     const nombre = res.ganador >= 0 ? W.Red.nombreDe(res.ganador) : 'NADIE';
     T(ctx, 'GANA ' + nombre + (res.motivo ? ' - ' + res.motivo : ''), A / 2, 30, PAL.cianClaro, 1, 'centro');
-    if (res.ganador >= 0 && res.personaje) W.Personajes.dibujarCuerpo(ctx, res.personaje, A / 2 - 8, 40, 1, t * 8, 2, Math.floor(t * 3) % 2 === 0);
+    if (res.ganador >= 0 && res.personaje) {
+      const lado = W.Retrato.TAM * 2 / 1.5, x = A / 2 - lado / 2;
+      ctx.fillStyle = PAL.cianOsc; ctx.fillRect(x - 1, 38, lado + 2, lado + 2);
+      ctx.drawImage(W.Retrato.cuadros(res.personaje)[W.Retrato.elegir(t, false)], x, 39, lado, lado);
+    }
     // Tabla
-    let y = 76;
+    let y = 90;
     T(ctx, 'JUGADOR', 70, y, PAL.gris); T(ctx, 'VICTORIAS', 190, y, PAL.gris, 1, 'centro'); T(ctx, 'CAIDAS', 250, y, PAL.gris, 1, 'centro');
     y += 10;
     for (const f of res.filas) {

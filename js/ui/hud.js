@@ -27,6 +27,11 @@
   // grande = true: dígitos grandes 5×7 (números del HUD)
   function texto(ctx, str, x, y, color, esc, alinear, grande) {
     esc = esc || 1;
+    // Capa de interfaz (diseño de 320×180): el texto va directo a 480×270, nítido
+    if (ctx.esUI) {
+      const k = ctx.k;
+      return texto(ctx.real, str, x * k, Math.round(y * k) + (esc === 1 ? 1 : 0), color, esc === 1 ? 1 : Math.round(esc * k), alinear, grande);
+    }
     const s = grande ? String(str) : F.normalizar(str);
     if (!s.length) return;
     const img = imagenTexto(s, color, esc, grande);
@@ -39,7 +44,7 @@
   // Texto en varias líneas que no excedan "ancho" píxeles. Devuelve la Y final.
   function parrafo(ctx, str, x, y, ancho, color, alinear, interlinea) {
     const palabras = F.normalizar(str).split(' ');
-    const maxCar = Math.floor((ancho + 1) / 4);
+    const maxCar = Math.floor(((ctx.esUI ? ancho * ctx.k : ancho) + 1) / 4);
     let linea = '';
     const lineas = [];
     for (const p of palabras) {
@@ -53,6 +58,7 @@
 
   // Texto con caja oscura de fondo
   function textoConCaja(ctx, str, x, y, color, borde) {
+    if (ctx.esUI) return textoConCaja32(ctx.real, str, x * ctx.k, Math.round(y * ctx.k) + 1, color, borde);
     const w = F.ancho(str, 1);
     const bx = Math.round(x - w / 2) - 3;
     ctx.fillStyle = 'rgba(7,6,13,0.82)';
